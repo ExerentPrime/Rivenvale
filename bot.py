@@ -1589,4 +1589,4 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 
 # Run the bot
-client.run(DISCORD_BOT_TOKEN)
+client.run(TOKEN)
