@@ -13,6 +13,9 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
+from dotenv import load_dotenv
+# Load the .env file
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
@@ -30,7 +33,8 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
 
 # Define custom paths in YOUR project folder
 custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
