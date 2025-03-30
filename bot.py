@@ -9,6 +9,7 @@ import os
 from io import BytesIO
 import pytesseract
 import pandas as pd
+import easyocr
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
@@ -27,7 +28,28 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
+
+# Define custom paths in YOUR project folder
+custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
+custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
+
+def easy_ocr(output_riven):
+    # Initialize EasyOCR with the custom path
+    reader = easyocr.Reader(
+        ['en'],
+        model_storage_directory=custom_model_dir,
+        user_network_directory=custom_user_dir,
+        download_enabled=False,
+        gpu=False
+    )
+    # Perform OCR
+    result = reader.readtext(output_riven)
+
+    # Extract and combine text
+    extracted_text = ' '.join([detection[1] for detection in result])
+    
+    return extracted_text
 
 def get_sheet_data(sheet_path, sheet_url):
     # Check if the file exists
@@ -1352,6 +1374,7 @@ async def status(interaction: discord.Interaction):
     
     ocr_engine=[
         app_commands.Choice(name="OCR Space (Better text detection)", value="OCR Space"),
+        app_commands.Choice(name="EasyOCR", value="EasyOCR"),
         app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
     ]
 )
@@ -1388,6 +1411,8 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     # Process the image using OCR API
     if ocr_engine == "OCR Space":
         extracted_text = await ocr_space_file(output_riven)
+    elif ocr_engine == "EasyOCR":
+        extracted_text = easy_ocr(output_riven)
     else:
         extracted_text = tesseract_OCR(output_riven)
     # print(extracted_text)
