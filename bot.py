@@ -41,6 +41,8 @@ def easy_ocr(output_riven):
         model_storage_directory=custom_model_dir,
         user_network_directory=custom_user_dir,
         download_enabled=True,
+        detector=False,
+        recognizer=False,
         gpu=False
     )
     # Perform OCR
