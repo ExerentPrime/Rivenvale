@@ -167,7 +167,7 @@ async def check_ocr_space_api():
                         if "UP" in status_text:
                             return True, discord.Embed(title="OCR Space API Status", description="✅ UP", color=0x00FF00)
                         else:
-                            return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN. The OCR engine is now set to EasyOCR. Processing...", color=0xFF0000)
+                            return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN", color=0xFF0000)
                 
                 return discord.Embed(title="OCR Space API Status", description="⚠️ Unable to determine status", color=0xFFA500)
         except Exception as e:
@@ -1400,6 +1400,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
             await interaction.followup.send(embed=status_embed)  # Use followup instead of response
+            await interaction.channel.send_message("The OCR engine is now set to EasyOCR. Processing...please wait")
             ocr_engine = "EasyOCR"
             # return
 
