@@ -13,9 +13,9 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 # Load the .env file
-#load_dotenv()
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
@@ -33,8 +33,8 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
-#pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
+# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
 
 # Define custom paths in YOUR project folder
 custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
@@ -167,7 +167,7 @@ async def check_ocr_space_api():
                         if "UP" in status_text:
                             return True, discord.Embed(title="OCR Space API Status", description="✅ UP", color=0x00FF00)
                         else:
-                            return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN. Please try again later.\nMeanwhile, you can try switching the OCR engine to Tesseract OCR during the input command. [How to](https://discord.com/channels/1350251436977557534/1351557739066691584/1354646928394158320)", color=0xFF0000)
+                            return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN. The OCR engine is now set to EasyOCR. Processing...", color=0xFF0000)
                 
                 return discord.Embed(title="OCR Space API Status", description="⚠️ Unable to determine status", color=0xFFA500)
         except Exception as e:
@@ -1289,10 +1289,17 @@ def bar_resize(min_value: float, max_value: float, value: float) -> float:
 
 
 def check_out_range(riven_stat_details):
+    out_range = False
+    out_range_faction = False
+    
     for i in range(riven_stat_details.StatCount):
         if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
-            return True
-    return False
+            if "Damage to" in riven_stat_details.StatName[i]:
+                out_range_faction = True
+            else:
+                out_range = True
+    
+    return out_range, out_range_faction
     
 class RivenStatDetails:
     def __init__(self):
@@ -1374,8 +1381,8 @@ async def status(interaction: discord.Interaction):
     ],
     
     riven_rank=[
-        app_commands.Choice(name="Unranked", value="Unranked"),
         app_commands.Choice(name="Maxed", value="Maxed"),
+        app_commands.Choice(name="Unranked", value="Unranked"),
     ],
     
     ocr_engine=[
@@ -1393,7 +1400,8 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
             await interaction.followup.send(embed=status_embed)  # Use followup instead of response
-            return
+            ocr_engine = "EasyOCR"
+            # return
 
     # Check if the uploaded file is an image
     if not (image.content_type and image.content_type.startswith("image/")):
@@ -1590,19 +1598,15 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     # Create image grading
     create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image.url, platinum)
     
-    if check_out_range(riven_stat_details):
-        # faction = False
-        # for i in range(riven_stat_details.StatCount):
-            # if "Damage to" in riven_stat_details.StatName[i]:
-                # faction = True
-                # break
-        
-        # if faction:
-            # title_text = "GRADING SUCCESS ✅ But.."
-            # description_text = f"There's a stat that is off the range. Make sure your input is correct.\nWeapon Name : **{weapon_name}?**\nWeapon Variant : **{weapon_variant}?**\nWeapon Type  : **{weapon_type}?**\nRiven Rank : **{riven_rank}?**\nIf your Riven image is sourced from the **riven.market** or  **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader.\n\n{add_text}"
-        # else:
+    # Check if out if range
+    out_range, out_range_faction = check_out_range(riven_stat_details)
+    
+    if out_range == True:
         title_text = "GRADING FAILED ❌"
-        description_text = f"There's a stat that is off the range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+        description_text = f"There's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+    elif out_range == False and out_range_faction == True:
+        title_text = "GRADING SUCCESS ✅️"
+        description_text = f"Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
     else:
         title_text = "GRADING SUCCESS ✅️"
         description_text = add_text
