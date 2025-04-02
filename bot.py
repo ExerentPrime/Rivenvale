@@ -13,14 +13,14 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 # Load the .env file
-# load_dotenv()
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+client = discord.AutoShardedClient(intents=intents)
 tree = app_commands.CommandTree(client)
 
 sheet_url = "https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8/export?format=xlsx"
@@ -33,8 +33,8 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
-# pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
+# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
 
 # Define custom paths in YOUR project folder
 custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
@@ -1400,7 +1400,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
             await interaction.followup.send(embed=status_embed)  # Use followup instead of response
-            await interaction.channel.send_message("The OCR engine is now set to EasyOCR. Processing...please wait")
+            await interaction.channel.send("The OCR engine is now set to EasyOCR. Processing...please wait")
             ocr_engine = "EasyOCR"
             # return
 
@@ -1433,7 +1433,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     # print(extracted_text)
     # return
     if "OCRSpace process failed" in extracted_text:
-        await interaction.followup.send(discord.Embed(title="OCR Space API Status", description="❌ DOWN. Please try again later", color=0xFF0000))
+        await interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
         return
     
     # Check if the image is Riven Mod
