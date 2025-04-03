@@ -13,9 +13,9 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 # Load the .env file
-#load_dotenv()
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
@@ -1489,6 +1489,11 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         column_positive = 'B'
         column_negative = 'E'
         column_notes = 'G'
+    elif is_kitgun(weapon_name):
+        df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
+        column_positive = 'B'
+        column_negative = 'F'
+        column_notes = 'I'
     else:
         if weapon_type == "Rifle" or weapon_type == "Shotgun":
             df = pd.read_excel("roll_data.xlsx", sheet_name="primary")  # Load sheet
