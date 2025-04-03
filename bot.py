@@ -7,15 +7,15 @@ import json
 import re
 import os
 from io import BytesIO
-import pytesseract
+#import pytesseract
 import pandas as pd
 import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 # Load the .env file
-#load_dotenv()
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
@@ -33,8 +33,8 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
-#pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
+# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
+# pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
 
 # Define custom paths in YOUR project folder
 custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
@@ -388,6 +388,8 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
                 if temp_type == "LongGuns":
                     if is_shotgun(weapon_name):
                         weapon_type = "Shotgun"
+                    elif is_kitgun(weapon_name):
+                        weapon_type = "Kitgun"
                     else:
                         weapon_type = "Rifle"
                 elif temp_type == "SentinelWeapons":
@@ -395,6 +397,8 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
                 elif temp_type == "Pistols":
                     if is_zaw(weapon_name):
                         weapon_type = "Melee"
+                    elif is_kitgun(weapon_name):
+                        weapon_type = "Kitgun"
                     else:
                         weapon_type = "Pistol"
                 elif temp_type == "Melee":
@@ -418,7 +422,7 @@ def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weap
             weapon_name = weapon['name']
             # Get weapon disposition
             if is_kitgun(weapon_name) == True:
-                if weapon_type != "Pistol":
+                if weapon_type == "Rifle" or weapon_type == "Shotgun":
                     weapon_dispo = weapon['primeOmegaAttenuation']
                 elif weapon_type == "Pistol":
                     weapon_dispo = weapon['omegaAttenuation']
@@ -1388,7 +1392,7 @@ async def status(interaction: discord.Interaction):
     ocr_engine=[
         app_commands.Choice(name="OCR Space (Better text detection)", value="OCR Space"),
         app_commands.Choice(name="EasyOCR", value="EasyOCR"),
-        app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
+        #app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
     ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None, ocr_engine:str = "OCR Space"):
@@ -1426,10 +1430,10 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     # Process the image using OCR API
     if ocr_engine == "OCR Space":
         extracted_text = await ocr_space_file(output_riven)
-    elif ocr_engine == "EasyOCR":
+    else: #ocr_engine == "EasyOCR":
         extracted_text = easy_ocr(output_riven)
-    else:
-        extracted_text = tesseract_OCR(output_riven)
+    # else:
+        # extracted_text = easy_ocr(output_riven)
     # print(extracted_text)
     # return
     if "OCRSpace process failed" in extracted_text:
@@ -1472,7 +1476,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         await interaction.followup.send(f"Weapon name not found!\n{extracted_text}")  # Use followup
         return
     
-    if is_kitgun(weapon_name) and weapon_type == "Auto":
+    if weapon_type == "Kitgun":
         await interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Please specify the weapon type manually.")  # Use followup
         return
     
@@ -1545,7 +1549,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, weapon_variant, weapon_type)
     
     if weapon_dispo == 0:
-        await interaction.followup.send(f"Weapon Disposition not found! {weapon_name} is not exist. Please ensure the input is correct.")  # Use followup
+        await interaction.followup.send(f"{weapon_name} disposition not found! Please ensure the input is correct.")  # Use followup
         return
     
     # Get value and stat name
