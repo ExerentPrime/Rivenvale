@@ -13,9 +13,9 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-#from dotenv import load_dotenv
+from dotenv import load_dotenv
 # Load the .env file
-#load_dotenv()
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
@@ -95,13 +95,13 @@ def excel_to_pandas(row, col):
     
     return row_index, col_index
 
-def tesseract_OCR(output_riven):
-    # Load the image using PIL (Pillow)
-    image = Image.open(output_riven)  # Replace with your image path
-    # Perform OCR on the image
-    text = pytesseract.image_to_string(image)
+# def tesseract_OCR(output_riven):
+    # # Load the image using PIL (Pillow)
+    # image = Image.open(output_riven)  # Replace with your image path
+    # # Perform OCR on the image
+    # text = pytesseract.image_to_string(image)
     
-    return text
+    # return text
     
 def convert_image_to_jpg(image_url, output_riven):
     try:
@@ -1518,20 +1518,25 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     negative_stats = ""
     notes = ""
     found = False
-    # Loop through each row
-    for index, row in df.iterrows():
-        roww, coll = excel_to_pandas(index + 1, 'A')
-        temp_name = df.iloc[roww, coll]
-        if temp_name.lower() in weapon_name.lower():
-            roww, coll = excel_to_pandas(index + 1, column_positive)
-            positive_stats = df.iloc[roww, coll]
-            roww, coll = excel_to_pandas(index + 1, column_negative)
-            negative_stats = df.iloc[roww, coll]
-            roww, coll = excel_to_pandas(index + 1, column_notes)
-            notes = df.iloc[roww, coll]
-            found = True
-            break
-            
+    try:
+        # Loop through each row
+        for index, row in df.iterrows():
+            roww, coll = excel_to_pandas(index + 1, 'A')
+            temp_name = df.iloc[roww, coll]
+            if temp_name.lower() in weapon_name.lower():
+                roww, coll = excel_to_pandas(index + 1, column_positive)
+                positive_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_negative)
+                negative_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_notes)
+                notes = df.iloc[roww, coll]
+                found = True
+                break
+    except Exception as e:
+        print(f"Error: {e}")
+        await interaction.followup.send(f"Error! You may have selected the wrong weapon type. Please double check and try again.")  # Use followup
+        return
+        
     if pd.isna(notes):
         notes = ""
         
