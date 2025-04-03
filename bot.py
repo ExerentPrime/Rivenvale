@@ -13,9 +13,9 @@ import easyocr
 import torch
 torch.backends.quantized.engine = 'none'
 
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 # Load the .env file
-load_dotenv()
+#load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Set up bot with intents
