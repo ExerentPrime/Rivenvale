@@ -1462,6 +1462,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
     extracted_text = extracted_text.replace("4Elect","Elect")
     extracted_text = extracted_text.replace("4Heat","Heat")
+    extracted_text = extracted_text.replace("2Cold","Cold")
     extracted_text = extracted_text.replace("%","")
     extracted_text = extracted_text.replace(",",".")
     extracted_text = extracted_text.replace(":",".")
