@@ -379,7 +379,11 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
             weapon_name = weapon['name']
             
             # Replace the temp_name and text before it in the extracted_text
-            extracted_text = re.sub(r'.*?' + temp_name, '', extracted_text)
+            if temp_name in extracted_text:
+                extracted_text = re.sub(r'.*?' + temp_name, '', extracted_text)
+            elif temp_name.title() in extracted_text:
+                extracted_text = re.sub(r'.*?' + temp_name.title(), '', extracted_text)
+                
             weapon_name_found = True
             
             # Get weapon type
