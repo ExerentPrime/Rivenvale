@@ -375,7 +375,7 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
             continue
         
         # Check if the extracted_text contains the temp_name
-        if temp_name in extracted_text:
+        if temp_name in extracted_text or temp_name.title() in extracted_text:
             weapon_name = weapon['name']
             
             # Replace the temp_name and text before it in the extracted_text
