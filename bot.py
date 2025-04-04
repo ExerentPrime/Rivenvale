@@ -1460,9 +1460,10 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     # Remove unnecessary double line text in riven mod
     extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
     extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
-    extracted_text = extracted_text.replace("4Elect","Elect")
-    extracted_text = extracted_text.replace("4Heat","Heat")
-    extracted_text = extracted_text.replace("2Cold","Cold")
+    extracted_text = re.sub(r"%.*?Heat", "%Heat", extracted_text)
+    extracted_text = re.sub(r"%.*?Elec", "%Elec", extracted_text)
+    extracted_text = re.sub(r"%.*?Cold", "%Cold", extracted_text)
+    extracted_text = re.sub(r"%.*?Toxin", "%Toxin", extracted_text)
     extracted_text = extracted_text.replace("%","")
     extracted_text = extracted_text.replace(",",".")
     extracted_text = extracted_text.replace(":",".")
