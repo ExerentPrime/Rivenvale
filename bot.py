@@ -647,7 +647,7 @@ def get_stat_name(input_string):
         return "Status Chance"
     elif "statusduration" in input_string:
         return "Status Duration"
-    elif "weaponrecoil" in input_string:
+    elif "weaponreco" in input_string:
         return "Weapon Recoil"
     elif "zoom" in input_string:
         return "Zoom"
@@ -1455,7 +1455,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     print(f"RAW extracted_text : {extracted_text}")
     # return
     # Remove special characters
-    extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,]", "", extracted_text)
+    extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
     
     # Remove unnecessary double line text in riven mod
     extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
@@ -1464,6 +1464,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
     extracted_text = extracted_text.replace("4Heat","Heat")
     extracted_text = extracted_text.replace("%","")
     extracted_text = extracted_text.replace(",",".")
+    extracted_text = extracted_text.replace(":",".")
     
     # Use regex to remove dots between numbers and letters
     extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
