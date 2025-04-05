@@ -1570,7 +1570,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         return
     
     # Get value and stat name
-    try
+    try:
         get_value_and_stat_name(extracted_text, riven_stat_details)
     except Exception as e:
         print(f"Error: {e}")
