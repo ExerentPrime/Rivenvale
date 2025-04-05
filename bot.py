@@ -1570,7 +1570,12 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         return
     
     # Get value and stat name
-    get_value_and_stat_name(extracted_text, riven_stat_details)
+    try
+        get_value_and_stat_name(extracted_text, riven_stat_details)
+    except Exception as e:
+        print(f"Error: {e}")
+        await interaction.followup.send(f"Error! Failed to retrieve the value and stat name. This may be due to the image being too low in resolution or something obscuring the text. Please retake the screenshot and try again.")  # Use followup
+        return
     
     riven_stat_details.StatCount = get_stat_count(riven_stat_details)
     riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
