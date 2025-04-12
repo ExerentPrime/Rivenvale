@@ -18,6 +18,11 @@ torch.backends.quantized.engine = 'none'
 #load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
+import asyncio
+from typing import Optional
+grading_queue = asyncio.Queue()
+grading_in_progress = False
+
 # Set up bot with intents
 intents = discord.Intents.default()
 client = discord.AutoShardedClient(intents=intents)
@@ -39,6 +44,30 @@ bar_curse_path = r"bar_curse.png"
 # Define custom paths in YOUR project folder
 custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
 custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
+
+class RivenStatDetails:
+    def __init__(self):
+        self.Prefix = [""] * 4  # List of 4 characters (equivalent to Char array)
+        self.Value = [999.9] * 4   # List of 4 doubles (floating-point numbers)
+        self.StatName = [""] * 4  # List of 4 strings
+        self.Unit = [""] * 4  # List of 4 strings
+        self.BuffCount = 0      # Integer
+        self.CurseCount = 0     # Integer
+        self.StatCount = 0      # Integer
+        self.RivenType = ""   # String
+        self.Min = [999.9] * 4   # List of 4 doubles (floating-point numbers)
+        self.Max = [999.9] * 4   # List of 4 doubles (floating-point numbers)
+        self.Grade = [""] * 4
+
+class GradingTask:
+    def __init__(self, interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine):
+        self.interaction = interaction
+        self.weapon_variant = weapon_variant
+        self.weapon_type = weapon_type
+        self.riven_rank = riven_rank
+        self.image = image
+        self.platinum = platinum
+        self.ocr_engine = ocr_engine
 
 def easy_ocr(output_riven):
     # Initialize EasyOCR with the custom path
@@ -1308,20 +1337,263 @@ def check_out_range(riven_stat_details):
                 out_range = True
     
     return out_range, out_range_faction
+
+async def process_grading(task: GradingTask):
+    # Check OCR API status first
+    if task.ocr_engine == "OCR Space":
+        is_up, status_embed = await check_ocr_space_api()
+        if not is_up:
+            await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
+            await task.interaction.channel.send("The OCR engine is now set to EasyOCR. Processing...please wait")
+            task.ocr_engine = "EasyOCR"
+            # return
+
+    # Check if the uploaded file is an image
+    if not (task.image.content_type and task.image.content_type.startswith("image/")):
+        await task.interaction.followup.send("Please upload a valid image file!")  # Use followup
+        return
     
-class RivenStatDetails:
-    def __init__(self):
-        self.Prefix = [""] * 4  # List of 4 characters (equivalent to Char array)
-        self.Value = [999.9] * 4   # List of 4 doubles (floating-point numbers)
-        self.StatName = [""] * 4  # List of 4 strings
-        self.Unit = [""] * 4  # List of 4 strings
-        self.BuffCount = 0      # Integer
-        self.CurseCount = 0     # Integer
-        self.StatCount = 0      # Integer
-        self.RivenType = ""   # String
-        self.Min = [999.9] * 4   # List of 4 doubles (floating-point numbers)
-        self.Max = [999.9] * 4   # List of 4 doubles (floating-point numbers)
-        self.Grade = [""] * 4
+    # Convert image to JPEG
+    global output_riven
+    convert_image_to_jpg(task.image.url, output_riven)
+    
+    # Get all weapon data (download and save txt file)
+    global weapon_data_url
+    global file_path
+    get_weapon_data(file_path, weapon_data_url)
+    
+    # Get roll_data
+    global sheet_url
+    global sheet_path
+    get_sheet_data(sheet_path, sheet_url)
+    
+    # Process the image using OCR API
+    if task.ocr_engine == "OCR Space":
+        extracted_text = await ocr_space_file(output_riven)
+    else: #task.ocr_engine == "EasyOCR":
+        extracted_text = easy_ocr(output_riven)
+    # else:
+        # extracted_text = easy_ocr(output_riven)
+    # print(extracted_text)
+    # return
+    if "OCRSpace process failed" in extracted_text:
+        await task.interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
+        return
+    
+    # Check if the image is Riven Mod
+    if is_riven(extracted_text) == False:
+        await task.interaction.followup.send("Please upload a Riven Mod image. Make sure to remove any unnecessary text on the Riven Mod details.")  # Use followup
+        print(f"is_riven extracted_text : {extracted_text}")
+        return
+    
+    # remove all types of whitespace
+    extracted_text = "".join(extracted_text.split())
+    print(f"RAW extracted_text : {extracted_text}")
+    # return
+    # Remove special characters
+    extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
+    
+    # Remove unnecessary double line text in riven mod
+    extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
+    extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
+    extracted_text = re.sub(r"%[^%]*Heat", "%Heat", extracted_text)
+    extracted_text = re.sub(r"%[^%]*Cold", "%Cold", extracted_text) #[^%]*: Matches any sequence of characters except another % (to ensure we're targeting only the closest segment to Cold).
+    extracted_text = re.sub(r"%[^%]*Elec", "%Elec", extracted_text)
+    extracted_text = re.sub(r"%[^%]*Toxin", "%Toxin", extracted_text)
+    extracted_text = extracted_text.replace("%","")
+    extracted_text = extracted_text.replace(",",".")
+    extracted_text = extracted_text.replace(":",".")
+    
+    # Use regex to remove dots between numbers and letters
+    extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
+    
+    print(f"FILTER extracted_text : {extracted_text}")
+    
+    # Create an instance of RivenStatDetails
+    riven_stat_details = RivenStatDetails()
+    
+    # Get weapon name and type on riven mod
+    weapon_name, weapon_name_found, task.weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type)
+    print(f"weapon_name : {weapon_name}")
+    if weapon_name_found == False:
+        await task.interaction.followup.send(f"Weapon name not found!\n{extracted_text}")  # Use followup
+        return
+    
+    if task.weapon_type == "Kitgun":
+        await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Please specify the weapon type manually.")  # Use followup
+        return
+    
+    column_positive = ''
+    column_negative = ''
+    column_notes = ''
+    # Load the Excel file
+    if get_type_sentinel_weapon(weapon_name) != "Error":
+        df = pd.read_excel("roll_data.xlsx", sheet_name="robotic")  # Load sheet
+        column_positive = 'B'
+        column_negative = 'E'
+        column_notes = 'G'
+    elif is_kitgun(weapon_name):
+        df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
+        column_positive = 'B'
+        column_negative = 'F'
+        column_notes = 'I'
+    else:
+        if task.weapon_type == "Rifle" or task.weapon_type == "Shotgun":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="primary")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'F'
+            column_notes = 'I'
+        elif task.weapon_type == "Pistol":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'F'
+            column_notes = 'I'
+        elif task.weapon_type == "Melee":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="melee")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'G'
+            column_notes = 'J'
+        elif task.weapon_type == "Archgun":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="archgun")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'H'
+            column_notes = 'J'
+        else:
+            print("Failed to load roll_data.xlsx")
+    # print(df.head())
+    # return
+    positive_stats = ""
+    negative_stats = ""
+    notes = ""
+    found = False
+    try:
+        # Loop through each row
+        for index, row in df.iterrows():
+            roww, coll = excel_to_pandas(index + 1, 'A')
+            temp_name = df.iloc[roww, coll]
+            if temp_name.lower() in weapon_name.lower():
+                roww, coll = excel_to_pandas(index + 1, column_positive)
+                positive_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_negative)
+                negative_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_notes)
+                notes = df.iloc[roww, coll]
+                found = True
+                break
+    except Exception as e:
+        print(f"Error: {e}")
+        await task.interaction.followup.send(f"Error! You may have selected the wrong weapon type. Please double check and try again.")  # Use followup
+        return
+        
+    if pd.isna(notes):
+        notes = ""
+        
+    if found:
+        add_text = f"**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+    else:
+        add_text = f""
+    
+    # Count buff stat
+    extracted_text = extracted_text.lower()
+    buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
+    riven_stat_details.BuffCount = buff_count
+    # return
+    # Get weapon disposition and update weapon name with variant
+    weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, task.weapon_variant, task.weapon_type)
+    
+    if weapon_dispo == 0:
+        await task.interaction.followup.send(f"{weapon_name} disposition not found! Please ensure the input is correct.")  # Use followup
+        return
+    
+    # Get value and stat name
+    try:
+        get_value_and_stat_name(extracted_text, riven_stat_details)
+    except Exception as e:
+        print(f"Error: {e}")
+        await task.interaction.followup.send(f"Error! Failed to retrieve the value and stat name. This may be due to the image being too low in resolution or something obscuring the text. Please retake the screenshot and try again.")  # Use followup
+        return
+        
+    riven_stat_details.StatCount = get_stat_count(riven_stat_details)
+    riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
+    get_riven_type(riven_stat_details)
+    
+    if riven_stat_details.RivenType == "Unknown Riven Type":
+        await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}")  # Use followup
+        print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
+        return
+    
+    # Stat Name correction
+    for i in range(riven_stat_details.StatCount):
+        if "Fire Rate" in riven_stat_details.StatName[i] and task.weapon_type == "Melee":
+            riven_stat_details.StatName[i] = "Attack Speed"
+    
+    # # Value Correction
+    # for i in range(riven_stat_details.StatCount):
+        # if riven_stat_details.Value[i] > 260 and weapon_dispo < 1 and riven_stat_details.StatName[i] == "Electricity":
+            # riven_stat_details.Value[i] -= 104
+            # print(f"value correction trigger!")
+    
+    # Damage to Faction value correction - convert to percentage
+    for i in range(riven_stat_details.StatCount):
+        damage_to_faction_fix(riven_stat_details, i)
+    
+    # Get Min Max
+    calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
+    
+    # Divide Min Max by 9 if riven_rank is Unranked
+    if task.riven_rank == "Unranked":
+        for i in range(riven_stat_details.StatCount):
+            riven_stat_details.Min[i] /= 9
+            riven_stat_details.Max[i] /= 9
+    
+    # Get Prefix and Unit
+    get_prefix_and_unit(riven_stat_details)
+    
+    # Set Grade
+    set_grade(riven_stat_details, task.weapon_type, weapon_dispo, task.riven_rank)
+    
+    # Damage to Faction value correction - percentage_to_decimal
+    for i in range(riven_stat_details.StatCount):
+        percentage_to_decimal(riven_stat_details, i)
+    
+    # print(f"All value : {riven_stat_details.Value}\nAll Min : {riven_stat_details.Min}\nAll Max : {riven_stat_details.Max}")
+    # return
+    # Create image grading
+    create_grading_image(riven_stat_details, weapon_name, weapon_dispo, task.image.url, task.platinum)
+    
+    # Check if out if range
+    out_range, out_range_faction = check_out_range(riven_stat_details)
+    
+    if out_range == True:
+        title_text = "GRADING FAILED ❌"
+        description_text = f"There's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+    elif out_range == False and out_range_faction == True:
+        title_text = "GRADING SUCCESS ✅️"
+        description_text = f"Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
+    else:
+        title_text = "GRADING SUCCESS ✅️"
+        description_text = add_text
+    
+    embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
+    # Add a footer to the embed
+    embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
+    # Ensure the image path is valid
+    global output_path
+    await task.interaction.followup.send(file=discord.File(output_path), embed=embed)
+
+async def grading_worker():
+    global grading_in_progress
+    while True:
+        task = await grading_queue.get()
+        try:
+            grading_in_progress = True
+            await process_grading(task)
+        except Exception as e:
+            print(f"Error processing grading: {e}")
+            await task.interaction.followup.send(f"❌ Error processing your Riven: {str(e)}")
+        finally:
+            grading_queue.task_done()
+            grading_in_progress = False
 
 @tree.command(name="legend", description="Legend/Key")
 async def status(interaction: discord.Interaction):
@@ -1352,6 +1624,16 @@ SLIDE : Critical Hit on Slide
 TOX   : Toxin
 """
     await interaction.response.send_message(f"```{embed_content}```")
+
+@tree.command(name="queue_status", description="Check grading queue status")
+async def queue_status(interaction: discord.Interaction):
+    if grading_queue.empty() and not grading_in_progress:
+        await interaction.response.send_message("✅ No Riven mods in queue")
+    else:
+        in_progress = " (Currently processing)" if grading_in_progress else ""
+        await interaction.response.send_message(
+            f"📊 Grading queue: {grading_queue.qsize()} Rivens waiting{in_progress}"
+        )
 
 @tree.command(name="status", description="OCRSpace API status.")
 async def status(interaction: discord.Interaction):
@@ -1402,253 +1684,25 @@ async def status(interaction: discord.Interaction):
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None, ocr_engine:str = "OCR Space"):
     # Immediately defer response to prevent expiration
     await interaction.response.defer(thinking=True)
-
-    # Check OCR API status first
-    if ocr_engine == "OCR Space":
-        is_up, status_embed = await check_ocr_space_api()
-        if not is_up:
-            await interaction.followup.send(embed=status_embed)  # Use followup instead of response
-            await interaction.channel.send("The OCR engine is now set to EasyOCR. Processing...please wait")
-            ocr_engine = "EasyOCR"
-            # return
-
-    # Check if the uploaded file is an image
-    if not (image.content_type and image.content_type.startswith("image/")):
-        await interaction.followup.send("Please upload a valid image file!")  # Use followup
-        return
     
-    # Convert image to JPEG
-    global output_riven
-    convert_image_to_jpg(image.url, output_riven)
+    # Create and queue the task
+    task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine)
+    await grading_queue.put(task)
     
-    # Get all weapon data (download and save txt file)
-    global weapon_data_url
-    global file_path
-    get_weapon_data(file_path, weapon_data_url)
+    # Get position in queue
+    position = grading_queue.qsize()
     
-    # Get roll_data
-    global sheet_url
-    global sheet_path
-    get_sheet_data(sheet_path, sheet_url)
-    
-    # Process the image using OCR API
-    if ocr_engine == "OCR Space":
-        extracted_text = await ocr_space_file(output_riven)
-    else: #ocr_engine == "EasyOCR":
-        extracted_text = easy_ocr(output_riven)
-    # else:
-        # extracted_text = easy_ocr(output_riven)
-    # print(extracted_text)
-    # return
-    if "OCRSpace process failed" in extracted_text:
-        await interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
-        return
-    
-    # Check if the image is Riven Mod
-    if is_riven(extracted_text) == False:
-        await interaction.followup.send("Please upload a Riven Mod image. Make sure to remove any unnecessary text on the Riven Mod details.")  # Use followup
-        print(f"is_riven extracted_text : {extracted_text}")
-        return
-    
-    # remove all types of whitespace
-    extracted_text = "".join(extracted_text.split())
-    print(f"RAW extracted_text : {extracted_text}")
-    # return
-    # Remove special characters
-    extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
-    
-    # Remove unnecessary double line text in riven mod
-    extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
-    extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
-    extracted_text = re.sub(r"%[^%]*Heat", "%Heat", extracted_text)
-    extracted_text = re.sub(r"%[^%]*Cold", "%Cold", extracted_text) #[^%]*: Matches any sequence of characters except another % (to ensure we're targeting only the closest segment to Cold).
-    extracted_text = re.sub(r"%[^%]*Elec", "%Elec", extracted_text)
-    extracted_text = re.sub(r"%[^%]*Toxin", "%Toxin", extracted_text)
-    extracted_text = extracted_text.replace("%","")
-    extracted_text = extracted_text.replace(",",".")
-    extracted_text = extracted_text.replace(":",".")
-    
-    # Use regex to remove dots between numbers and letters
-    extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
-    
-    print(f"FILTER extracted_text : {extracted_text}")
-    
-    # Create an instance of RivenStatDetails
-    riven_stat_details = RivenStatDetails()
-    
-    # Get weapon name and type on riven mod
-    weapon_name, weapon_name_found, weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, weapon_type)
-    print(f"weapon_name : {weapon_name}")
-    if weapon_name_found == False:
-        await interaction.followup.send(f"Weapon name not found!\n{extracted_text}")  # Use followup
-        return
-    
-    if weapon_type == "Kitgun":
-        await interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Please specify the weapon type manually.")  # Use followup
-        return
-    
-    column_positive = ''
-    column_negative = ''
-    column_notes = ''
-    # Load the Excel file
-    if get_type_sentinel_weapon(weapon_name) != "Error":
-        df = pd.read_excel("roll_data.xlsx", sheet_name="robotic")  # Load sheet
-        column_positive = 'B'
-        column_negative = 'E'
-        column_notes = 'G'
-    elif is_kitgun(weapon_name):
-        df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
-        column_positive = 'B'
-        column_negative = 'F'
-        column_notes = 'I'
+    if position == 1 and not grading_in_progress:
+        await interaction.followup.send("🔄 Your Riven is being graded now!")
     else:
-        if weapon_type == "Rifle" or weapon_type == "Shotgun":
-            df = pd.read_excel("roll_data.xlsx", sheet_name="primary")  # Load sheet
-            column_positive = 'B'
-            column_negative = 'F'
-            column_notes = 'I'
-        elif weapon_type == "Pistol":
-            df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
-            column_positive = 'B'
-            column_negative = 'F'
-            column_notes = 'I'
-        elif weapon_type == "Melee":
-            df = pd.read_excel("roll_data.xlsx", sheet_name="melee")  # Load sheet
-            column_positive = 'B'
-            column_negative = 'G'
-            column_notes = 'J'
-        elif weapon_type == "Archgun":
-            df = pd.read_excel("roll_data.xlsx", sheet_name="archgun")  # Load sheet
-            column_positive = 'B'
-            column_negative = 'H'
-            column_notes = 'J'
-        else:
-            print("Failed to load roll_data.xlsx")
-    # print(df.head())
-    # return
-    positive_stats = ""
-    negative_stats = ""
-    notes = ""
-    found = False
-    try:
-        # Loop through each row
-        for index, row in df.iterrows():
-            roww, coll = excel_to_pandas(index + 1, 'A')
-            temp_name = df.iloc[roww, coll]
-            if temp_name.lower() in weapon_name.lower():
-                roww, coll = excel_to_pandas(index + 1, column_positive)
-                positive_stats = df.iloc[roww, coll]
-                roww, coll = excel_to_pandas(index + 1, column_negative)
-                negative_stats = df.iloc[roww, coll]
-                roww, coll = excel_to_pandas(index + 1, column_notes)
-                notes = df.iloc[roww, coll]
-                found = True
-                break
-    except Exception as e:
-        print(f"Error: {e}")
-        await interaction.followup.send(f"Error! You may have selected the wrong weapon type. Please double check and try again.")  # Use followup
-        return
-        
-    if pd.isna(notes):
-        notes = ""
-        
-    if found:
-        add_text = f"**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
-    else:
-        add_text = f""
-    
-    # Count buff stat
-    extracted_text = extracted_text.lower()
-    buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
-    riven_stat_details.BuffCount = buff_count
-    # return
-    # Get weapon disposition and update weapon name with variant
-    weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, weapon_variant, weapon_type)
-    
-    if weapon_dispo == 0:
-        await interaction.followup.send(f"{weapon_name} disposition not found! Please ensure the input is correct.")  # Use followup
-        return
-    
-    # Get value and stat name
-    try:
-        get_value_and_stat_name(extracted_text, riven_stat_details)
-    except Exception as e:
-        print(f"Error: {e}")
-        await interaction.followup.send(f"Error! Failed to retrieve the value and stat name. This may be due to the image being too low in resolution or something obscuring the text. Please retake the screenshot and try again.")  # Use followup
-        return
-    
-    riven_stat_details.StatCount = get_stat_count(riven_stat_details)
-    riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
-    get_riven_type(riven_stat_details)
-    
-    if riven_stat_details.RivenType == "Unknown Riven Type":
-        await interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}")  # Use followup
-        print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
-        return
-    
-    # Stat Name correction
-    for i in range(riven_stat_details.StatCount):
-        if "Fire Rate" in riven_stat_details.StatName[i] and weapon_type == "Melee":
-            riven_stat_details.StatName[i] = "Attack Speed"
-    
-    # # Value Correction
-    # for i in range(riven_stat_details.StatCount):
-        # if riven_stat_details.Value[i] > 260 and weapon_dispo < 1 and riven_stat_details.StatName[i] == "Electricity":
-            # riven_stat_details.Value[i] -= 104
-            # print(f"value correction trigger!")
-    
-    # Damage to Faction value correction - convert to percentage
-    for i in range(riven_stat_details.StatCount):
-        damage_to_faction_fix(riven_stat_details, i)
-    
-    # Get Min Max
-    calculate_stats(riven_stat_details, weapon_type, weapon_dispo)
-    
-    # Divide Min Max by 9 if riven_rank is Unranked
-    if riven_rank == "Unranked":
-        for i in range(riven_stat_details.StatCount):
-            riven_stat_details.Min[i] /= 9
-            riven_stat_details.Max[i] /= 9
-    
-    # Get Prefix and Unit
-    get_prefix_and_unit(riven_stat_details)
-    
-    # Set Grade
-    set_grade(riven_stat_details, weapon_type, weapon_dispo, riven_rank)
-    
-    # Damage to Faction value correction - percentage_to_decimal
-    for i in range(riven_stat_details.StatCount):
-        percentage_to_decimal(riven_stat_details, i)
-    
-    # print(f"All value : {riven_stat_details.Value}\nAll Min : {riven_stat_details.Min}\nAll Max : {riven_stat_details.Max}")
-    # return
-    # Create image grading
-    create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image.url, platinum)
-    
-    # Check if out if range
-    out_range, out_range_faction = check_out_range(riven_stat_details)
-    
-    if out_range == True:
-        title_text = "GRADING FAILED ❌"
-        description_text = f"There's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
-    elif out_range == False and out_range_faction == True:
-        title_text = "GRADING SUCCESS ✅️"
-        description_text = f"Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
-    else:
-        title_text = "GRADING SUCCESS ✅️"
-        description_text = add_text
-    
-    embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
-    # Add a footer to the embed
-    embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
-    # Ensure the image path is valid
-    global output_path
-    await interaction.followup.send(file=discord.File(output_path), embed=embed)
+        await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
 
 @client.event
 async def on_ready():
     await tree.sync()
     print(f'Logged in as {client.user}')
+    # Start the worker when bot is ready
+    client.loop.create_task(grading_worker())
 
 # Run the bot
 client.run(TOKEN)
