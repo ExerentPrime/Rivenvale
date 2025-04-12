@@ -70,7 +70,6 @@ class GradingTask:
         self.ocr_engine = ocr_engine
 
 async def easy_ocr(output_riven):
-    await interaction.response.defer()
     # Initialize EasyOCR with the custom path
     reader = easyocr.Reader(
         ['en'],
@@ -79,6 +78,9 @@ async def easy_ocr(output_riven):
         download_enabled=True,
         gpu=False
     )
+    # Small delay before processing
+    await asyncio.sleep(1)
+    
     # Perform OCR
     result = reader.readtext(output_riven)
 
