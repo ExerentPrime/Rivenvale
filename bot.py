@@ -69,7 +69,7 @@ class GradingTask:
         self.platinum = platinum
         self.ocr_engine = ocr_engine
 
-def easy_ocr(output_riven):
+async def easy_ocr(output_riven):
     # Initialize EasyOCR with the custom path
     reader = easyocr.Reader(
         ['en'],
@@ -1371,7 +1371,7 @@ async def process_grading(task: GradingTask):
     if task.ocr_engine == "OCR Space":
         extracted_text = await ocr_space_file(output_riven)
     else: #task.ocr_engine == "EasyOCR":
-        extracted_text = easy_ocr(output_riven)
+        extracted_text = await easy_ocr(output_riven)
     # else:
         # extracted_text = easy_ocr(output_riven)
     # print(extracted_text)
