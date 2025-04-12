@@ -7,7 +7,6 @@ import json
 import re
 import os
 from io import BytesIO
-import time
 #import pytesseract
 import pandas as pd
 import easyocr
@@ -71,7 +70,7 @@ class GradingTask:
         self.ocr_engine = ocr_engine
 
 async def easy_ocr(output_riven):
-    time.sleep(5)
+    await interaction.response.defer()
     # Initialize EasyOCR with the custom path
     reader = easyocr.Reader(
         ['en'],
