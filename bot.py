@@ -70,6 +70,7 @@ class GradingTask:
         self.ocr_engine = ocr_engine
 
 async def easy_ocr(output_riven):
+    time.sleep(2)
     # Initialize EasyOCR with the custom path
     reader = easyocr.Reader(
         ['en'],
