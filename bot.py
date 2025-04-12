@@ -7,6 +7,7 @@ import json
 import re
 import os
 from io import BytesIO
+import time
 #import pytesseract
 import pandas as pd
 import easyocr
