@@ -78,9 +78,6 @@ async def easy_ocr(output_riven):
         download_enabled=True,
         gpu=False
     )
-    # Small delay before processing
-    await asyncio.sleep(1)
-    
     # Perform OCR
     result = reader.readtext(output_riven)
 
@@ -1690,20 +1687,20 @@ async def status(interaction: discord.Interaction):
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None, ocr_engine:str = "OCR Space"):
     try:
-        # Defer first to prevent timeout
+        # Immediately defer response to prevent expiration
         await interaction.response.defer(thinking=True)
-        
-        # Send queue status IMMEDIATELY
-        position = grading_queue.qsize() + 1
-        
-        if position == 1:
-            msg = await interaction.followup.send("🔄 Your Riven is being graded now!")
-        else:
-            msg = await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
-        
-        # Only AFTER sending status, create and queue the task
+    
+        # Create and queue the task
         task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine)
         await grading_queue.put(task)
+    
+        # Get position in queue
+        position = grading_queue.qsize()
+    
+        if position == 1 and not grading_in_progress:
+            await interaction.followup.send("🔄 Your Riven is being graded now!")
+        else:
+            await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
         
     except Exception as e:
         print(f"Error in grading command: {e}")
