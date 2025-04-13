@@ -1386,8 +1386,8 @@ async def process_grading(task: GradingTask):
     # Process the image using OCR API
     if task.ocr_engine == "OCR Space":
         extracted_text = await ocr_space_file(output_riven)
-    else:
-        extracted_text = await tesseract_ocr(output_riven)
+    # else:
+        # extracted_text = await tesseract_ocr(output_riven)
     # else: #task.ocr_engine == "EasyOCR":
         # extracted_text = await easy_ocr(output_riven)
     print(f"RAW extracted_text : {extracted_text}")
