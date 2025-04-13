@@ -1,17 +1,17 @@
 import aiohttp
 import discord
 from discord import app_commands
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import requests
 import json
 import re
 import os
 from io import BytesIO
-#import pytesseract
+# import pytesseract
 import pandas as pd
-import easyocr
-import torch
-torch.backends.quantized.engine = 'none'
+# import easyocr
+# import torch
+# torch.backends.quantized.engine = 'none'
 
 #from dotenv import load_dotenv
 # Load the .env file
@@ -38,12 +38,13 @@ output_riven = r"riven_image.jpg" # Converted riven image JPG path
 output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
+
 # pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
 # pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
 
 # Define custom paths in YOUR project folder
-custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
-custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
+# custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
+# custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
 
 class RivenStatDetails:
     def __init__(self):
@@ -69,22 +70,22 @@ class GradingTask:
         self.platinum = platinum
         self.ocr_engine = ocr_engine
 
-async def easy_ocr(output_riven):
-    # Initialize EasyOCR with the custom path
-    reader = easyocr.Reader(
-        ['en'],
-        model_storage_directory=custom_model_dir,
-        user_network_directory=custom_user_dir,
-        download_enabled=True,
-        gpu=False
-    )
-    # Perform OCR
-    result = reader.readtext(output_riven)
+# async def easy_ocr(output_riven):
+    # # Initialize EasyOCR with the custom path
+    # reader = easyocr.Reader(
+        # ['en'],
+        # model_storage_directory=custom_model_dir,
+        # user_network_directory=custom_user_dir,
+        # download_enabled=True,
+        # gpu=False
+    # )
+    # # Perform OCR
+    # result = reader.readtext(output_riven)
 
-    # Extract and combine text
-    extracted_text = ' '.join([detection[1] for detection in result])
+    # # Extract and combine text
+    # extracted_text = ' '.join([detection[1] for detection in result])
     
-    return extracted_text
+    # return extracted_text
 
 def get_sheet_data(sheet_path, sheet_url):
     # Check if the file exists
@@ -123,14 +124,6 @@ def excel_to_pandas(row, col):
     row_index = int(row) - 1  # Subtract 1 for 0-based indexing in pandas
     
     return row_index, col_index
-
-# def tesseract_OCR(output_riven):
-    # # Load the image using PIL (Pillow)
-    # image = Image.open(output_riven)  # Replace with your image path
-    # # Perform OCR on the image
-    # text = pytesseract.image_to_string(image)
-    
-    # return text
     
 def convert_image_to_jpg(image_url, output_riven):
     try:
@@ -148,6 +141,29 @@ def convert_image_to_jpg(image_url, output_riven):
         print(f"Image successfully converted to JPG and saved as {output_riven}")
     except Exception as e:
         print(f"Error: {e}")
+
+# async def tesseract_ocr(output_riven):
+    # try:
+        # try:
+            # img = Image.open(output_riven)
+        # except Exception as e:
+            # return f"Error: Could not load image - {str(e)}"
+        
+        # # Convert to grayscale
+        # gray = img.convert('L')
+        
+        # # Enhance contrast
+        # enhanced = ImageOps.autocontrast(gray)
+        
+        # # OCR with mobile-optimized settings
+        # text = pytesseract.image_to_string(
+            # enhanced,
+            # config='--oem 1 --psm 6'
+        # )
+        # return text.strip()
+    
+    # except Exception as e:
+        # return f"OCR Processing Error: {str(e)}"
 
 async def ocr_space_file(filename):
     try:
@@ -1339,13 +1355,13 @@ def check_out_range(riven_stat_details):
     return out_range, out_range_faction
 
 async def process_grading(task: GradingTask):
-    # Check OCR API status first
-    if task.ocr_engine == "OCR Space":
-        is_up, status_embed = await check_ocr_space_api()
-        if not is_up:
-            await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
-            await task.interaction.channel.send("The OCR engine is now set to EasyOCR. Processing...please wait")
-            task.ocr_engine = "EasyOCR"
+    # # Check OCR API status first
+    # if task.ocr_engine == "OCR Space":
+        # is_up, status_embed = await check_ocr_space_api()
+        # if not is_up:
+            # await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
+            # # await task.interaction.channel.send("The OCR engine is now set to Tesseract OCR. Processing...please wait")
+            # # task.ocr_engine = "Tesseract OCR"
             # return
 
     # Check if the uploaded file is an image
@@ -1370,13 +1386,13 @@ async def process_grading(task: GradingTask):
     # Process the image using OCR API
     if task.ocr_engine == "OCR Space":
         extracted_text = await ocr_space_file(output_riven)
-    else: #task.ocr_engine == "EasyOCR":
-        extracted_text = await easy_ocr(output_riven)
-    # else:
-        # extracted_text = easy_ocr(output_riven)
-    # print(extracted_text)
+    else:
+        extracted_text = await tesseract_ocr(output_riven)
+    # else: #task.ocr_engine == "EasyOCR":
+        # extracted_text = await easy_ocr(output_riven)
+    print(f"RAW extracted_text : {extracted_text}")
     # return
-    if "OCRSpace process failed" in extracted_text:
+    if "OCRSpace process failed" in extracted_text or "Error" in extracted_text:
         await task.interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
         return
     
@@ -1388,7 +1404,7 @@ async def process_grading(task: GradingTask):
     
     # remove all types of whitespace
     extracted_text = "".join(extracted_text.split())
-    print(f"RAW extracted_text : {extracted_text}")
+    #print(f"RAW extracted_text : {extracted_text}")
     # return
     # Remove special characters
     extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
@@ -1677,21 +1693,27 @@ async def status(interaction: discord.Interaction):
     riven_rank=[
         app_commands.Choice(name="Maxed", value="Maxed"),
         app_commands.Choice(name="Unranked", value="Unranked"),
-    ],
-    
-    ocr_engine=[
-        app_commands.Choice(name="OCR Space (Better text detection)", value="OCR Space"),
-        app_commands.Choice(name="EasyOCR", value="EasyOCR"),
-        #app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
     ]
+    
+    # ocr_engine=[
+        # app_commands.Choice(name="OCR Space (Better text detection)", value="OCR Space"),
+        # app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
+        # app_commands.Choice(name="EasyOCR", value="Easy OCR"),
+    # ]
 )
-async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None, ocr_engine:str = "OCR Space"):
+async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
     try:
         # Immediately defer response to prevent expiration
         await interaction.response.defer(thinking=True)
-    
+        
+        is_up, status_embed = await check_ocr_space_api()
+        if not is_up:
+            await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
+            await task.interaction.channel.send("Please try again later.")
+            return
+        
         # Create and queue the task
-        task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine)
+        task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, "OCR Space")
         await grading_queue.put(task)
     
         # Get position in queue
