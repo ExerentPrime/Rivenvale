@@ -19,7 +19,7 @@ import pandas as pd
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 import asyncio
-from typing import Optional
+# from typing import Optional
 grading_queue = asyncio.Queue()
 grading_in_progress = False
 
@@ -1413,7 +1413,7 @@ async def process_grading(task: GradingTask):
     extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
     extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
     extracted_text = re.sub(r"%[^%]*Heat", "%Heat", extracted_text)
-    extracted_text = re.sub(r"%[^%]*Cold", "%Cold", extracted_text) #[^%]*: Matches any sequence of characters except another % (to ensure we're targeting only the closest segment to Cold).
+    extracted_text = re.sub(r"%[^%]*Cold", "%Cold", extracted_text)
     extracted_text = re.sub(r"%[^%]*Elec", "%Elec", extracted_text)
     extracted_text = re.sub(r"%[^%]*Toxin", "%Toxin", extracted_text)
     extracted_text = extracted_text.replace("%","")
@@ -1505,7 +1505,7 @@ async def process_grading(task: GradingTask):
         notes = ""
         
     if found:
-        add_text = f"**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+        add_text = f"{task.interaction.user.mention}\n**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
     else:
         add_text = f""
     
@@ -1582,10 +1582,10 @@ async def process_grading(task: GradingTask):
     
     if out_range == True:
         title_text = "GRADING FAILED ❌"
-        description_text = f"There's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+        description_text = f"{task.interaction.user.mention}\nThere's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
     elif out_range == False and out_range_faction == True:
         title_text = "GRADING SUCCESS ✅️"
-        description_text = f"Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
+        description_text = f"{task.interaction.user.mention}\nDamage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
     else:
         title_text = "GRADING SUCCESS ✅️"
         description_text = add_text
@@ -1707,7 +1707,15 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         await interaction.response.defer(thinking=True)
         
         is_up, status_embed = await check_ocr_space_api()
-        if not is_up:
+        if is_up:
+            # Get position in queue
+            position = grading_queue.qsize() + 1
+    
+            if position == 1 and not grading_in_progress:
+                await interaction.followup.send("🔄 Your Riven is being graded now!")
+            else:
+                await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
+        elif not is_up:
             await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
             await task.interaction.channel.send("Please try again later.")
             return
@@ -1716,14 +1724,6 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, "OCR Space")
         await grading_queue.put(task)
     
-        # Get position in queue
-        position = grading_queue.qsize()
-    
-        if position == 1 and not grading_in_progress:
-            await interaction.followup.send("🔄 Your Riven is being graded now!")
-        else:
-            await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
-        
     except Exception as e:
         print(f"Error in grading command: {e}")
         try:
