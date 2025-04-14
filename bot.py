@@ -1702,6 +1702,8 @@ async def status(interaction: discord.Interaction):
     # ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
+    global grading_in_progress  # Ensure grading_in_progress is updated
+
     try:
         # Immediately defer response to prevent expiration
         await interaction.response.defer(thinking=True)
@@ -1710,14 +1712,15 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         if is_up:
             # Get position in queue
             position = grading_queue.qsize() + 1
-    
+
             if position == 1 and not grading_in_progress:
+                grading_in_progress = True
                 await interaction.followup.send("🔄 Your Riven is being graded now!")
             else:
                 await interaction.followup.send(f"📝 Your Riven has been queued. Position: {position}")
-        elif not is_up:
-            await task.interaction.followup.send(embed=status_embed)  # Use followup instead of response
-            await task.interaction.channel.send("Please try again later.")
+        else:
+            await interaction.followup.send(embed=status_embed) 
+            await interaction.channel.send("Please try again later.")
             return
         
         # Create and queue the task
@@ -1728,8 +1731,8 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         print(f"Error in grading command: {e}")
         try:
             await interaction.followup.send("❌ Failed to queue your Riven. Please try again.")
-        except:
-            print("Failed to send error message")
+        except Exception as send_error:
+            print(f"Failed to send error message: {send_error}")
 
 @client.event
 async def on_ready():
