@@ -1505,7 +1505,7 @@ async def process_grading(task: GradingTask):
         notes = ""
         
     if found:
-        add_text = f"{task.interaction.user.mention}\n**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+        add_text = f"**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
     else:
         add_text = f""
     
@@ -1588,7 +1588,7 @@ async def process_grading(task: GradingTask):
         description_text = f"{task.interaction.user.mention}\nDamage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
     else:
         title_text = "GRADING SUCCESS ✅️"
-        description_text = add_text
+        description_text = f"{task.interaction.user.mention}\n{add_text}"
     
     embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
     # Add a footer to the embed
