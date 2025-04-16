@@ -87,7 +87,7 @@ class GradingTask:
     
     # return extracted_text
 
-def get_sheet_data(sheet_path, sheet_url):
+async def get_sheet_data(sheet_path, sheet_url):
     # Check if the file exists
     if not os.path.exists(sheet_path):
         print("roll_data.xlsx does not exist. Downloading...")
@@ -125,7 +125,7 @@ def excel_to_pandas(row, col):
     
     return row_index, col_index
     
-def convert_image_to_jpg(image_url, output_riven):
+async def convert_image_to_jpg(image_url, output_riven):
     try:
         # Fetch the image from the given URL
         response = requests.get(image_url)
@@ -266,7 +266,7 @@ def get_buff_count(extracted_text: str):
     # print(f"after get_buff_count > extracted_text : {extracted_text}")
     return buff_count, extracted_text, buff_naming
 
-def get_weapon_data(file_path: str, weapon_data_url: str):
+async def get_weapon_data(file_path: str, weapon_data_url: str):
     # Check if the file exists
     if not os.path.exists(file_path):
         print("weapon_data.txt does not exist. Downloading...")
@@ -1109,7 +1109,7 @@ def get_grade_color(grade):
     
     return grade_colors.get(grade, "White")
 
-def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_url, platinum):
+async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_url, platinum):
     # Set file paths
     global background_path
     global font_path
@@ -1371,17 +1371,17 @@ async def process_grading(task: GradingTask):
     
     # Convert image to JPEG
     global output_riven
-    convert_image_to_jpg(task.image.url, output_riven)
+    await convert_image_to_jpg(task.image.url, output_riven)
     
     # Get all weapon data (download and save txt file)
     global weapon_data_url
     global file_path
-    get_weapon_data(file_path, weapon_data_url)
+    await get_weapon_data(file_path, weapon_data_url)
     
     # Get roll_data
     global sheet_url
     global sheet_path
-    get_sheet_data(sheet_path, sheet_url)
+    await get_sheet_data(sheet_path, sheet_url)
     
     # Process the image using OCR API
     if task.ocr_engine == "OCR Space":
@@ -1575,7 +1575,7 @@ async def process_grading(task: GradingTask):
     # print(f"All value : {riven_stat_details.Value}\nAll Min : {riven_stat_details.Min}\nAll Max : {riven_stat_details.Max}")
     # return
     # Create image grading
-    create_grading_image(riven_stat_details, weapon_name, weapon_dispo, task.image.url, task.platinum)
+    await create_grading_image(riven_stat_details, weapon_name, weapon_dispo, task.image.url, task.platinum)
     
     # Check if out if range
     out_range, out_range_faction = check_out_range(riven_stat_details)
