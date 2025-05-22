@@ -41,7 +41,7 @@ bar_curse_path = r"bar_curse.png"
 
 # pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
 # pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
-
+# test
 # Define custom paths in YOUR project folder
 # custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
 # custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
