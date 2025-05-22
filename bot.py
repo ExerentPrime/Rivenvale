@@ -30,7 +30,7 @@ tree = app_commands.CommandTree(client)
 
 sheet_url = "https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8/export?format=xlsx"
 sheet_path = r"roll_data.xlsx"
-weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_-6MPgtHF9gDxnV+xbnvy3g"
+weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_cvUPQzwNqPAo-ZCjxHSf-A"
 file_path = r"weapon_data.txt"
 background_path = r"bg.png"
 font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
