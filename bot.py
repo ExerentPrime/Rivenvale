@@ -1712,7 +1712,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         # Start processing in the background
         asyncio.create_task(process_grading(task))
         
-        if not result == "success" then:
+        if not result == "success":
             os.remove(output_riven)
         
     except Exception as e:
