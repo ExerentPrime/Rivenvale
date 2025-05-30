@@ -1693,7 +1693,7 @@ async def status(interaction: discord.Interaction):
     # ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
-    global result, output_riven
+    global result
     result = "waiting..."
     try:
         # Immediately defer response to prevent expiration
@@ -1711,7 +1711,8 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, "OCR Space")
         # Start processing in the background
         asyncio.create_task(process_grading(task))
-        
+
+        global output_riven
         if not result == "success":
             os.remove(output_riven)
         
