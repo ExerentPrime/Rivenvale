@@ -1433,8 +1433,7 @@ async def process_grading(task: GradingTask):
             weapon_name, weapon_name_found, task.weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type)
             print(f"weapon_name : {weapon_name}")
             if weapon_name_found == False:
-                await task.interaction.followup.send(f"Weapon name not found!\n{extracted_text}")  # Use followup
-                await task.interaction.channel.send(file=discord.File(output_riven))
+                await task.interaction.followup.send(f"Weapon name not found!\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 return
     
             if task.weapon_type == "Kitgun":
