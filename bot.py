@@ -25,6 +25,7 @@ import asyncio
 # grading_in_progress = False
 # Modify the GradingTask class to include a semaphore for rate limiting
 grading_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent gradings
+result = ""
 
 # Set up bot with intents
 intents = discord.Intents.default()
@@ -1599,6 +1600,8 @@ async def process_grading(task: GradingTask):
             # Ensure the image path is valid
             
             await task.interaction.followup.send(file=discord.File(output_path), embed=embed)
+            global result
+            result = "success"
             
             try:
                 os.remove(output_riven)
@@ -1690,6 +1693,8 @@ async def status(interaction: discord.Interaction):
     # ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
+    global result
+    result = "waiting..."
     try:
         # Immediately defer response to prevent expiration
         await interaction.response.defer(thinking=True)
@@ -1706,7 +1711,10 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
         task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, "OCR Space")
         # Start processing in the background
         asyncio.create_task(process_grading(task))
-    
+        
+        if not result == "success" then:
+            os.remove(output_riven)
+        
     except Exception as e:
         print(f"Error in grading command: {e}")
         try:
