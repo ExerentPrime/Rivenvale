@@ -1693,7 +1693,7 @@ async def status(interaction: discord.Interaction):
     # ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
-    global result
+    global result, output_riven
     result = "waiting..."
     try:
         # Immediately defer response to prevent expiration
