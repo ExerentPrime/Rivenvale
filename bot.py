@@ -128,6 +128,34 @@ def excel_to_pandas(row, col):
     
     return row_index, col_index
     
+async def resize_large_image(image_path: str, max_size: int = 1920) -> None:
+    """Resize an image if its width or height exceeds max_size while maintaining aspect ratio."""
+    try:
+        with Image.open(image_path) as img:
+            width, height = img.size
+            
+            # Check if resizing is needed
+            if width <= max_size and height <= max_size:
+                return
+            
+            # Calculate new dimensions while maintaining aspect ratio
+            if width > height:
+                new_width = max_size
+                new_height = int((max_size / width) * height)
+            else:
+                new_height = max_size
+                new_width = int((max_size / height) * width)
+                
+            # Resize the image
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Save the resized image (overwrite original)
+            resized_img.save(image_path)
+            print(f"Resized image from {width}x{height} to {new_width}x{new_height}")
+            
+    except Exception as e:
+        print(f"Error resizing image: {e}")
+
 async def convert_image_to_jpg(image_url, output_riven):
     try:
         # Fetch the image from the given URL
@@ -141,6 +169,9 @@ async def convert_image_to_jpg(image_url, output_riven):
         rgb_image = image.convert('RGB')  # Ensure compatibility with JPG format
         rgb_image.save(output_riven, format='JPEG')
 
+        # Resize if too large
+        await resize_large_image(output_riven)
+        
         print(f"Image successfully converted to JPG and saved as {output_riven}")
     except Exception as e:
         print(f"Error: {e}")
