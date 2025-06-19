@@ -995,135 +995,51 @@ def damage_to_faction_fix(riven_stat_details, i):
         else:
             riven_stat_details.Value[i] = (1 - riven_stat_details.Value[i]) * 100
 
-def get_grade(grade_value, grade_type):
-    if grade_type != "Curse":
-        if grade_value <= -9.5:
-            return "F"
-        elif grade_value > -9.5 and grade_value <= -7.5:
-            return "C-"
-        elif grade_value > -7.5 and grade_value <= -5.5:
-            return "C"
-        elif grade_value > -5.5 and grade_value <= -3.5:
-            return "C+"
-        elif grade_value > -3.5 and grade_value <= -1.5:
-            return "B-"
-        elif grade_value > -1.5 and grade_value <= 1.5:
-            return "B"
-        elif grade_value > 1.5 and grade_value <= 3.5:
-            return "B+"
-        elif grade_value > 3.5 and grade_value <= 5.5:
-            return "A-"
-        elif grade_value > 5.5 and grade_value <= 7.5:
-            return "A"
-        elif grade_value > 7.5 and grade_value <= 9.5:
-            return "A+"
-        elif grade_value > 9.5:
-            return "S"
-        else:
-            # print("GRADING ERROR. Make sure weapon variant selected is correct")
-            return "ERR"
+def get_grade_new(normalize):
+    if normalize <= -9.5:
+        return "F"
+    elif -9.5 < normalize <= -7.5:
+        return "C-"
+    elif -7.5 < normalize <= -5.5:
+        return "C"
+    elif -5.5 < normalize <= -3.5:
+        return "C+"
+    elif -3.5 < normalize <= -1.5:
+        return "B-"
+    elif -1.5 < normalize <= 1.5:
+        return "B"
+    elif 1.5 < normalize <= 3.5:
+        return "B+"
+    elif 3.5 < normalize <= 5.5:
+        return "A-"
+    elif 5.5 < normalize <= 7.5:
+        return "A"
+    elif 7.5 < normalize <= 9.5:
+        return "A+"
+    elif normalize > 9.5:
+        return "S"
     else:
-        if grade_value <= -9.5:
-            return "S"
-        elif grade_value > -9.5 and grade_value <= -7.5:
-            return "A+"
-        elif grade_value > -7.5 and grade_value <= -5.5:
-            return "A"
-        elif grade_value > -5.5 and grade_value <= -3.5:
-            return "A-"
-        elif grade_value > -3.5 and grade_value <= -1.5:
-            return "B+"
-        elif grade_value > -1.5 and grade_value <= 1.5:
-            return "B"
-        elif grade_value > 1.5 and grade_value <= 3.5:
-            return "B-"
-        elif grade_value > 3.5 and grade_value <= 5.5:
-            return "C+"
-        elif grade_value > 5.5 and grade_value <= 7.5:
-            return "C"
-        elif grade_value > 7.5 and grade_value <= 9.5:
-            return "C-"
-        elif grade_value > 9.5:
-            return "F"
-        else:
-            # print("GRADING ERROR. Make sure weapon variant selected is correct")
-            return "ERR"
-
-def set_grade(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
-    if riven_stat_details.RivenType == "2 Buff 0 Curse":
-        for i in range(2):
-            if riven_rank == "Unranked":
-                temp_value = riven_stat_details.Value[i] * 9
-            else:
-                temp_value = riven_stat_details.Value[i]
-            grade_value = get_base_stat(riven_stat_details.StatName[i], weapon_type) * 0.99 * weapon_dispo
-            grade_value = (temp_value / grade_value) * 100 - 100
-            grade_value = round(grade_value, 3)
-            print(f"Grade Value Buff {i+1} : {grade_value}")
-            riven_stat_details.Grade[i] = get_grade(grade_value, "Buff")
-
-    elif riven_stat_details.RivenType == "2 Buff 1 Curse":
-        for i in range(2):
-            if riven_rank == "Unranked":
-                temp_value = riven_stat_details.Value[i] * 9
-            else:
-                temp_value = riven_stat_details.Value[i]
-            grade_value = get_base_stat(riven_stat_details.StatName[i], weapon_type) * 1.2375 * weapon_dispo
-            grade_value = (temp_value / grade_value) * 100 - 100
-            grade_value = round(grade_value, 3)
-            print(f"Grade Value Buff {i+1} : {grade_value}")
-            riven_stat_details.Grade[i] = get_grade(grade_value, "Buff")
-        
-        if riven_rank == "Unranked":
-            temp_value = riven_stat_details.Value[2] * 9
-        else:
-            temp_value = riven_stat_details.Value[2]
-        grade_value = get_base_stat(riven_stat_details.StatName[2], weapon_type) * 0.495 * weapon_dispo
-        grade_value = (temp_value / grade_value) * 100 - 100
-        grade_value = round(grade_value, 3)
-        print(f"Grade Value Stat Curse : {grade_value}")
-        riven_stat_details.Grade[2] = get_grade(grade_value, "Curse")
-         
-    elif riven_stat_details.RivenType == "3 Buff 0 Curse":
-        for i in range(3):
-            if riven_rank == "Unranked":
-                temp_value = riven_stat_details.Value[i] * 9
-            else:
-                temp_value = riven_stat_details.Value[i]
-            grade_value = get_base_stat(riven_stat_details.StatName[i], weapon_type) * 0.75 * weapon_dispo
-            grade_value = (temp_value / grade_value) * 100 - 100
-            grade_value = round(grade_value, 3)
-            print(f"Grade Value Buff {i+1} : {grade_value}")
-            riven_stat_details.Grade[i] = get_grade(grade_value, "Buff")
+        # print("GRADING ERROR. Make sure weapon variant selected is correct")
+        return "ERR"
             
-    else: # 3 Buff 1 Curse
-        for i in range(3):
-            if riven_rank == "Unranked":
-                temp_value = riven_stat_details.Value[i] * 9
-            else:
-                temp_value = riven_stat_details.Value[i]
-            
-            # normalize = (riven_stat_details.Value[i] - riven_stat_details.Min[i]) / (riven_stat_details.Max[i] - riven_stat_details.Min[i])
-            # grade_value = -0.10 + (normalize*(0.10-(-0.10)))
-            # grade_value *= 100
-            grade_value = get_base_stat(riven_stat_details.StatName[i], weapon_type) * 0.9375 * weapon_dispo
-            grade_value = (temp_value / grade_value) * 100 - 100
-            grade_value = round(grade_value, 3)
-            print(f"Grade Value Buff {i+1} : {grade_value}")
-            riven_stat_details.Grade[i] = get_grade(grade_value, "Buff")
-        
+def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
+    for i in range(riven_stat_details.StatCount):
         if riven_rank == "Unranked":
-            temp_value = riven_stat_details.Value[3] * 9
+            temp_value = riven_stat_details.Value[i] * 9
         else:
-            temp_value = riven_stat_details.Value[3]
-        # normalize = (riven_stat_details.Value[3] - riven_stat_details.Min[3]) / (riven_stat_details.Max[3] - riven_stat_details.Min[3])
-        # grade_value = -0.10 + (normalize*(0.10-(-0.10)))
-        # grade_value *= 100
-        grade_value = get_base_stat(riven_stat_details.StatName[3], weapon_type) * 0.75 * weapon_dispo
-        grade_value = (temp_value / grade_value) * 100 - 100
-        grade_value = round(grade_value, 3)
-        print(f"Grade Value Curse : {grade_value}")
-        riven_stat_details.Grade[3] = get_grade(grade_value, "Curse")
+            temp_value = riven_stat_details.Value[i]
+        
+        mid_value = (riven_stat_details.Min[i] + riven_stat_details.Max[i]) / 2
+        mid_value = round(mid_value, 1)
+        normalize = (temp_value / mid_value) * 100 - 100
+        normalize = round(normalize, 3)
+        
+        if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
+            riven_stat_details.Grade[i] = get_grade_new(-normalize)
+            print(f"Grade Value Curse : {-normalize}")
+        else:
+            riven_stat_details.Grade[i] = get_grade_new(normalize)
+            print(f"Grade Value Buff {i+1} : {normalize}")
 
 # Define a function that returns a color based on the grade
 def get_grade_color(grade):
@@ -1599,7 +1515,7 @@ async def process_grading(task: GradingTask):
             get_prefix_and_unit(riven_stat_details)
     
             # Set Grade
-            set_grade(riven_stat_details, task.weapon_type, weapon_dispo, task.riven_rank)
+            set_grade_new(riven_stat_details, task.weapon_type, weapon_dispo, task.riven_rank)
     
             # Damage to Faction value correction - percentage_to_decimal
             for i in range(riven_stat_details.StatCount):
