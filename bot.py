@@ -1667,5 +1667,17 @@ async def on_ready():
     await tree.sync()
     print(f'Logged in as {client.user}')
 
+    # Define the path to the bot's script location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Clean up any images containing "riven_image" in the filename
+    for filename in os.listdir(script_dir):
+        if "riven_image" in filename and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            try:
+                os.remove(os.path.join(script_dir, filename))
+                print(f"Deleted: {filename}")
+            except Exception as e:
+                print(f"Failed to delete {filename}: {e}")
+
 # Run the bot
 client.run(TOKEN)
