@@ -1678,6 +1678,7 @@ async def on_ready():
                 print(f"Deleted: {filename}")
             except Exception as e:
                 print(f"Failed to delete {filename}: {e}")
+                break
 
 # Run the bot
 client.run(TOKEN)
