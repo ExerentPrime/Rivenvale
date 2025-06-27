@@ -1664,9 +1664,6 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
 
 @client.event
 async def on_ready():
-    await tree.sync()
-    print(f'Logged in as {client.user}')
-
     # Define the path to the bot's script location
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -1679,6 +1676,8 @@ async def on_ready():
             except Exception as e:
                 print(f"Failed to delete {filename}: {e}")
                 break
-
+                
+    await tree.sync()
+    print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
