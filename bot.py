@@ -1483,7 +1483,7 @@ async def process_grading(task: GradingTask):
             get_riven_type(riven_stat_details)
     
             if riven_stat_details.RivenType == "Unknown Riven Type":
-                await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}")  # Use followup
+                await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
                 return
     
