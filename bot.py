@@ -14,6 +14,8 @@ import uuid
 # import torch
 # torch.backends.quantized.engine = 'none'
 
+#from dotenv import load_dotenv
+#load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 import asyncio
