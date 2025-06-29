@@ -14,9 +14,6 @@ import uuid
 # import torch
 # torch.backends.quantized.engine = 'none'
 
-#from dotenv import load_dotenv
-# Load the .env file
-#load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 import asyncio
@@ -214,6 +211,7 @@ async def ocr_space_file(filename):
                 'https://api.ocr.space/parse/image',
                 files={filename: f},
                 data=payload,
+                timeout=10  # Timeout after 10 seconds
             )
 
         # Decode the response and extract "ParsedText"
@@ -444,6 +442,14 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
     for weapon in data.get("ExportWeapons", []):
         temp_name = weapon['name']
         
+        # bug fix for Lexi detect as Lex (weapon)
+        if temp_name == "Lex":
+            index = extracted_text.find("Lex")
+            if index + 3 < len(extracted_text):  # Make sure there's a next character
+                if extracted_text[index + 3] == "i":
+                    print("Found 'Lex' followed by 'i'!")
+                    continue
+                
         # Remove spaces from the name
         if " " in temp_name:
             temp_name = temp_name.replace(" ", "")
@@ -458,10 +464,15 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
             weapon_name = weapon['name']
             
             # Replace the temp_name and text before it in the extracted_text
-            if temp_name in extracted_text:
-                extracted_text = re.sub(r'.*?' + temp_name, '', extracted_text)
-            elif temp_name.title() in extracted_text:
-                extracted_text = re.sub(r'.*?' + temp_name.title(), '', extracted_text)
+            if weapon_name == "Lex" and "Lexi" in extracted_text: #bug fix for lex and lexi
+                match = re.search(r'(Lex)(?=Lexi)', extracted_text)
+                if match:
+                    extracted_text = extracted_text[:match.start()] + extracted_text[match.end():]
+            else: #other weapon
+                if temp_name in extracted_text:
+                    extracted_text = re.sub(r'.*?' + temp_name, '', extracted_text)
+                elif temp_name.title() in extracted_text:
+                    extracted_text = re.sub(r'.*?' + temp_name.title(), '', extracted_text)
                 
             weapon_name_found = True
             
@@ -1339,6 +1350,7 @@ async def process_grading(task: GradingTask):
             # return
             if "OCRSpace process failed" in extracted_text or "Error" in extracted_text:
                 await task.interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
+                await interaction.channel.send("Please try again.")
                 return
     
             # Check if the image is Riven Mod
