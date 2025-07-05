@@ -1357,7 +1357,7 @@ async def process_grading(task: GradingTask):
     
             # Check if the image is Riven Mod
             if is_riven(extracted_text) == False:
-                await task.interaction.followup.send("Please upload a Riven Mod image. Make sure to remove any unnecessary text on the Riven Mod.", file=discord.File(output_riven))  # Use followup
+                await task.interaction.followup.send("Please upload an image containing only one visible Riven Mod. Do not include any extra text, only the Riven Mod itself.", file=discord.File(output_riven))  # Use followup
                 print(f"is_riven extracted_text : {extracted_text}")
                 return
     
