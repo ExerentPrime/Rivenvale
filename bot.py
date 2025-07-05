@@ -1394,7 +1394,7 @@ async def process_grading(task: GradingTask):
             weapon_name, weapon_name_found, task.weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type)
             print(f"weapon_name : {weapon_name}")
             if weapon_name_found == False:
-                await task.interaction.followup.send(f"Weapon name not found!\n{extracted_text}", file=discord.File(output_riven))  # Use followup
+                await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 os.remove(output_riven)
                 return
     
