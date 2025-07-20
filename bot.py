@@ -1,6 +1,6 @@
 import aiohttp
 import discord
-from discord import app_commands
+from discord import app_commands, File
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import requests
 import json
@@ -10,6 +10,10 @@ from io import BytesIO
 # import pytesseract
 import pandas as pd
 import uuid
+
+from ultralytics import YOLO
+import cv2
+import numpy as np
 # import easyocr
 # import torch
 # torch.backends.quantized.engine = 'none'
@@ -30,6 +34,7 @@ intents = discord.Intents.default()
 client = discord.AutoShardedClient(intents=intents)
 tree = app_commands.CommandTree(client)
 
+model = YOLO(r"best.pt")
 sheet_url = "https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8/export?format=xlsx"
 sheet_path = r"roll_data.xlsx"
 weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_ANNFevSHgcBTO0WIEpyj4A"
@@ -1575,6 +1580,58 @@ async def process_grading(task: GradingTask):
             except:
                 print("Failed to send error message")
         
+@tree.command(name="crop", description="Auto crop Riven mod.")
+async def crop_riven(interaction: discord.Interaction, image: discord.Attachment):
+    await interaction.response.defer()
+
+    if not image:
+        await interaction.followup.send("Please upload an image.")
+        return
+
+    try:
+        img_bytes = await image.read()
+
+        # Open the image using PIL
+        pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+        img_array = np.array(pil_img)
+
+        # Run detection
+        results = model(img_array, verbose=False)
+        crops = []
+
+        for r in results:
+            if not r.boxes:
+                continue
+
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                name = model.names[cls_id]
+
+                if name == "riven_mod":
+                    # Get bounding box and crop
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    cropped = pil_img.crop((x1, y1, x2, y2))
+
+                    # Save locally
+                    unique_name = f"riven_image_crop_{uuid.uuid4().hex}.jpg"
+                    save_path = f"{unique_name}"
+                    # os.makedirs("saved_crops", exist_ok=True)
+                    cropped.save(save_path, format="JPEG", quality=95)
+
+                    # Also prepare to send to user
+                    image_io = BytesIO()
+                    cropped.save(image_io, format="JPEG", quality=95)
+                    image_io.seek(0)
+                    crops.append(File(fp=image_io, filename=unique_name))
+
+        if crops:
+            await interaction.followup.send(f"Detected {len(crops)} Riven mod(s):", files=crops)
+        else:
+            await interaction.followup.send("No Riven mod found in the image.")
+
+    except Exception as e:
+        await interaction.followup.send(f"Error processing image: {e}")
+    
 @tree.command(name="legend", description="Legend/Key")
 async def status(interaction: discord.Interaction):
     embed_content = """
