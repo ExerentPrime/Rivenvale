@@ -7,26 +7,17 @@ import json
 import re
 import os
 from io import BytesIO
-# import pytesseract
 import pandas as pd
 import uuid
-
 from ultralytics import YOLO
 import cv2
 import numpy as np
-# import easyocr
-# import torch
-# torch.backends.quantized.engine = 'none'
 
 #from dotenv import load_dotenv
 #load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 import asyncio
-# from typing import Optional
-# grading_queue = asyncio.Queue()
-# grading_in_progress = False
-# Modify the GradingTask class to include a semaphore for rate limiting
 grading_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent gradings
 
 # Set up bot with intents
@@ -41,17 +32,10 @@ weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeap
 file_path = r"weapon_data.txt"
 background_path = r"bg.png"
 font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
-output_riven = r"riven_image.jpg" # Converted riven image JPG path
-output_path = r"riven_grade.png" # Save grade image path
+# output_riven = r"riven_image.jpg" # Converted riven image JPG path
+# output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
-
-# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Update with your path
-# pytesseract.pytesseract.tesseract_cmd = r'tesseract\tesseract.exe'  # Update with your path
-# test
-# Define custom paths in YOUR project folder
-# custom_model_dir = os.path.join(os.getcwd(), "easyocr_models")
-# custom_user_dir = os.path.join(os.getcwd(), "easyocr_userdata")
 
 class RivenStatDetails:
     def __init__(self):
@@ -76,23 +60,6 @@ class GradingTask:
         self.image = image
         self.platinum = platinum
         self.ocr_engine = ocr_engine
-
-# async def easy_ocr(output_riven):
-    # # Initialize EasyOCR with the custom path
-    # reader = easyocr.Reader(
-        # ['en'],
-        # model_storage_directory=custom_model_dir,
-        # user_network_directory=custom_user_dir,
-        # download_enabled=True,
-        # gpu=False
-    # )
-    # # Perform OCR
-    # result = reader.readtext(output_riven)
-
-    # # Extract and combine text
-    # extracted_text = ' '.join([detection[1] for detection in result])
-    
-    # return extracted_text
 
 async def get_sheet_data(sheet_path, sheet_url):
     # Check if the file exists
@@ -160,48 +127,19 @@ async def resize_large_image(image_path: str, max_size: int = 1920) -> None:
     except Exception as e:
         print(f"Error resizing image: {e}")
 
-async def convert_image_to_jpg(image_url, output_riven):
+async def convert_image_to_jpg(image_path, output_riven):
     try:
-        # Fetch the image from the given URL
-        response = requests.get(image_url)
-        response.raise_for_status()
-
-        # Open the image
-        image = Image.open(BytesIO(response.content))
-
-        # Convert and save the image as JPG
-        rgb_image = image.convert('RGB')  # Ensure compatibility with JPG format
-        rgb_image.save(output_riven, format='JPEG')
-
-        # Resize if too large
-        await resize_large_image(output_riven)
-        
-        print(f"Image successfully converted to JPG and saved as {output_riven}")
+        # Open the image file directly
+        with Image.open(image_path) as image:
+            # Convert and save
+            rgb_image = image.convert('RGB')
+            rgb_image.save(output_riven, "JPEG")
+            await resize_large_image(output_riven)
+            print(f"Converted {image_path} to {output_riven}")
+            
     except Exception as e:
-        print(f"Error: {e}")
-
-# async def tesseract_ocr(output_riven):
-    # try:
-        # try:
-            # img = Image.open(output_riven)
-        # except Exception as e:
-            # return f"Error: Could not load image - {str(e)}"
-        
-        # # Convert to grayscale
-        # gray = img.convert('L')
-        
-        # # Enhance contrast
-        # enhanced = ImageOps.autocontrast(gray)
-        
-        # # OCR with mobile-optimized settings
-        # text = pytesseract.image_to_string(
-            # enhanced,
-            # config='--oem 1 --psm 6'
-        # )
-        # return text.strip()
-    
-    # except Exception as e:
-        # return f"OCR Processing Error: {str(e)}"
+        print(f"Error converting image: {e}")
+        raise
 
 async def ocr_space_file(filename):
     try:
@@ -1077,26 +1015,35 @@ def get_grade_color(grade):
     
     return grade_colors.get(grade, "White")
 
-async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_url, platinum):
+async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_file, platinum):
     # Set file paths
     global background_path
     global font_path
 
     # Load the background image
     background = Image.open(background_path)
+    
+    # Handle image input (could be path or discord.File)
+    if isinstance(image_file, str):
+        # Input is a file path
+        riven_image = Image.open(image_file)
+    elif isinstance(image_file, discord.File):
+        # Input is discord.File - save to temp file
+        temp_path = f"temp_input_{uuid.uuid4().hex}.jpg"
+        with open(temp_path, "wb") as f:
+            await image_file.save(f)
+        riven_image = Image.open(temp_path)
+        os.remove(temp_path)  # Clean up temp file
+    else:
+        print("Invalid image input type")
+        # raise ValueError("Invalid image input type")
 
-    # Load the left image
-    response = requests.get(image_url)
-    if response.status_code == 200:
-        riven_image = Image.open(BytesIO(response.content))  # Open the image from the URL
-        # Define the dimensions of the box area
-        box_width, box_height = 240, 350
-        # Resize the image to fit within the box area while maintaining aspect ratio
-        riven_image.thumbnail((box_width, box_height))
-        
-        riven_image_x = 33 + (box_width - riven_image.width) // 2
-        riven_image_y = (box_height - riven_image.height) // 2
-        background.paste(riven_image, (riven_image_x, riven_image_y))
+    # Resize and position the Riven image
+    box_width, box_height = 240, 350
+    riven_image.thumbnail((box_width, box_height))
+    riven_image_x = 33 + (box_width - riven_image.width) // 2
+    riven_image_y = (box_height - riven_image.height) // 2
+    background.paste(riven_image, (riven_image_x, riven_image_y))
 
     # Draw on the background
     draw = ImageDraw.Draw(background)
@@ -1289,13 +1236,12 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         # Update bar_y for spacing
         bar_y = bar_y + 68  # Spacing for bar
 
-        
     # Save the resulting image
-    global output_path
-    # Convert the image to RGB (removing the alpha channel)
+    # global output_path
+    output_path = f"riven_image_grade_{uuid.uuid4().hex}.jpg"
     background = background.convert("RGB")
     background.save(output_path, format="JPEG", dpi=(dpi, dpi))
-    print(f"Image saved at {output_path} with {dpi} DPI!")
+    return output_path
 
 def bar_resize(min_value: float, max_value: float, value: float) -> float:
     if value > max_value:
@@ -1327,14 +1273,14 @@ async def process_grading(task: GradingTask):
         try:
             task_id = str(uuid.uuid4())[:8]
             # Check if the uploaded file is an image
-            if not (task.image.content_type and task.image.content_type.startswith("image/")):
-                await task.interaction.followup.send("Please upload a valid image file!")  # Use followup
-                return
+            # Handle the image file directly
+            # if not isinstance(task.image, discord.File):
+                # await task.interaction.followup.send("Invalid image format!")
+                # return
                 
             # Convert image to JPEG
-            global output_riven
             output_riven = f"riven_image_{task_id}.jpg"
-            await convert_image_to_jpg(task.image.url, output_riven)
+            await convert_image_to_jpg(task.image, output_riven)
     
             # Get all weapon data (download and save txt file)
             global weapon_data_url
@@ -1543,9 +1489,15 @@ async def process_grading(task: GradingTask):
             # print(f"All value : {riven_stat_details.Value}\nAll Min : {riven_stat_details.Min}\nAll Max : {riven_stat_details.Max}")
             # return
             # Create image grading
-            global output_path
-            output_path = f"riven_grade_{task_id}.png"
-            await create_grading_image(riven_stat_details, weapon_name, weapon_dispo, task.image.url, task.platinum)
+            # global output_path
+            # Create grading image - now passing the file path directly
+            output_path = await create_grading_image(
+                riven_stat_details, 
+                weapon_name, 
+                weapon_dispo, 
+                output_riven,  # Pass the file path directly
+                task.platinum
+            )
     
             # Check if out if range
             out_range, out_range_faction = check_out_range(riven_stat_details)
@@ -1567,18 +1519,26 @@ async def process_grading(task: GradingTask):
             
             await task.interaction.followup.send(file=discord.File(output_path), embed=embed)
             
-            try:
-                os.remove(output_riven)
-                os.remove(output_path)
-            except:
-                pass
+            # try:
+                # os.remove(output_riven)
+                # os.remove(output_path)
+            # except:
+                # pass
             
         except Exception as e:
-            print(f"Error processing grading: {e}")
+            print(f"Grading error: {e}")
             try:
-                await task.interaction.followup.send(f"❌ Processing error: {str(e)}")
+                await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
             except:
-                print("Failed to send error message")
+                print("Failed to send error")
+        # finally:
+            # # Clean up files
+            # for f in [output_riven, output_path]:
+                # if os.path.exists(f):
+                    # try:
+                        # os.remove(f)
+                    # except:
+                        # pass
         
 @tree.command(name="crop", description="Auto crop Riven mod.")
 async def crop_riven(interaction: discord.Interaction, image: discord.Attachment):
@@ -1701,16 +1661,9 @@ async def status(interaction: discord.Interaction):
         app_commands.Choice(name="Maxed", value="Maxed"),
         app_commands.Choice(name="Unranked", value="Unranked"),
     ]
-    
-    # ocr_engine=[
-        # app_commands.Choice(name="OCR Space (Better text detection)", value="OCR Space"),
-        # app_commands.Choice(name="Tesseract OCR", value="Tesseract OCR"),
-        # app_commands.Choice(name="EasyOCR", value="Easy OCR"),
-    # ]
 )
 async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
     try:
-        # Immediately defer response to prevent expiration
         await interaction.response.defer(thinking=True)
         
         is_up, status_embed = await check_ocr_space_api()
@@ -1719,19 +1672,82 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
             await interaction.channel.send("Please try again later.")
             return
         
-        # await interaction.followup.send("🔄 Your Riven is being graded now!")
-        
-        # Create and start processing the task immediately
-        task = GradingTask(interaction, weapon_variant, weapon_type, riven_rank, image, platinum, "OCR Space")
-        # Start processing in the background
-        asyncio.create_task(process_grading(task))
-        
+        # First try to detect and crop Riven mods from the image
+        try:
+            img_bytes = await image.read()
+            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+            img_array = np.array(pil_img)
+
+            # Run detection
+            results = model(img_array, verbose=False)
+            crops = []
+
+            for r in results:
+                if not r.boxes:
+                    continue
+
+                for box in r.boxes:
+                    cls_id = int(box.cls[0])
+                    name = model.names[cls_id]
+
+                    if name == "riven_mod":
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        cropped = pil_img.crop((x1, y1, x2, y2))
+                        crops.append(cropped)
+            
+            # Only notify if multiple Rivens detected
+            if len(crops) > 1:
+                await interaction.followup.send(f"🔍 Detected {len(crops)} Riven mods. Processing ...")
+            elif not crops:
+                crops = [pil_img]
+                await interaction.followup.send("⚠️ No Riven mods detected. Processing entire image...")
+                
+        except Exception as e:
+            print(f"Error in crop detection: {e}")
+            crops = [Image.open(BytesIO(await image.read()))]
+            await interaction.followup.send("⚠️ Riven detection failed. Processing entire image...")
+
+        # Process each cropped Riven mod
+        for i, crop in enumerate(crops):
+            temp_filename = None
+            try:
+                # Save crop to temporary file
+                temp_filename = f"temp_riven_image_{uuid.uuid4().hex}.jpg"
+                crop.save(temp_filename, "JPEG")
+                
+                # Create task with file path
+                task = GradingTask(
+                    interaction=interaction,
+                    weapon_variant=weapon_variant,
+                    weapon_type=weapon_type,
+                    riven_rank=riven_rank,
+                    image=temp_filename,  # Pass file path directly
+                    platinum=platinum,
+                    ocr_engine="OCR Space"
+                )
+                
+                await process_grading(task)
+                
+            except Exception as e:
+                print(f"Error processing crop {i}: {e}")
+                try:
+                    await interaction.followup.send(f"❌ Failed to process Riven mod #{i+1}")
+                except Exception as send_error:
+                    print(f"Failed to send error: {send_error}")
+            # finally:
+                # # Ensure file is closed and deleted
+                # if temp_filename and os.path.exists(temp_filename):
+                    # try:
+                        # os.remove(temp_filename)
+                    # except Exception as e:
+                        # print(f"Couldn't delete {temp_filename}: {e}")
+
     except Exception as e:
         print(f"Error in grading command: {e}")
         try:
-            await interaction.followup.send("❌ Failed to start grading your Riven. Please try again.")
+            await interaction.followup.send("❌ Failed to process your Riven. Please try again.")
         except Exception as send_error:
-            print(f"Failed to send error message: {send_error}")
+            print(f"Failed to send error: {send_error}")
 
 @client.event
 async def on_ready():
