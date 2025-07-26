@@ -13,8 +13,8 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 
-#from dotenv import load_dotenv
-#load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 import asyncio
