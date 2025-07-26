@@ -16,6 +16,7 @@ import numpy as np
 from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+ocr_api = os.getenv("OCR_API")
 
 import asyncio
 grading_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent gradings
@@ -36,6 +37,101 @@ font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
 # output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
+
+class RegradeView(discord.ui.View):
+    def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, platinum: str = None):
+        super().__init__(timeout=180)  # 3 minute timeout
+        self.original_message = original_message
+        self.original_image_path = original_image_path
+        self.weapon_name = weapon_name
+        self.platinum = platinum
+        self.current_variant = "Normal"  # Initialize with default values
+        self.variant = "Normal"  # Ensure this attribute exists
+        
+        # Get base weapon name (remove variant if present)
+        base_name = get_base_weapon_name(weapon_name)
+        
+        # Get available variants
+        global file_path
+        variants = get_available_variants(file_path, base_name)
+        
+        # Create variant dropdown options
+        variant_options = []
+        for variant in variants:
+            # Determine display name
+            if variant == base_name:
+                display_name = "Normal"
+                value = "Normal"
+            else:
+                display_name = variant.replace(base_name, "").strip()
+                value = display_name
+            
+            variant_options.append(
+                discord.SelectOption(label=display_name, value=value)
+            )
+        
+        # Variant dropdown
+        self.variant_select = discord.ui.Select(
+            placeholder="Select weapon variant",
+            options=variant_options
+        )
+        self.variant_select.callback = self.on_variant_select
+        self.add_item(self.variant_select)
+    
+    async def on_variant_select(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        self.variant = self.variant_select.values[0]
+        
+        # Check if variant actually changed
+        if self.variant == self.current_variant:
+            await interaction.followup.send(
+                "You selected the same variant. No changes made.",
+                ephemeral=True
+            )
+            return
+        
+        # Create new grading task with selected variant
+        task = GradingTask(
+            interaction=interaction,
+            weapon_variant=self.variant,
+            weapon_type="Auto",
+            riven_rank="Auto",  # Auto-detect rank
+            image=self.original_image_path,
+            platinum=self.platinum,
+            ocr_engine="OCR Space"
+        )
+        
+        # Get the original task's raw_extracted_text if available
+        if hasattr(self, 'original_task'):
+            task.raw_extracted_text = self.original_task.raw_extracted_text
+        
+        # Process the grading and get the new image path
+        new_image_path, new_embed = await process_grading(task, is_edit=True)
+        
+        if new_image_path:
+            # Update current variant
+            self.current_variant = self.variant
+            
+            # Update dropdown default
+            for option in self.variant_select.options:
+                option.default = (option.value == self.variant)
+            
+            with open(new_image_path, 'rb') as f:
+                file = discord.File(f)
+                await self.original_message.edit(
+                    attachments=[file],
+                    embed=new_embed,
+                    view=self
+                )
+
+    async def on_timeout(self):
+        # Disable all components when the view times out
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.original_message.edit(view=self)
+        except:
+            pass
 
 class RivenStatDetails:
     def __init__(self):
@@ -60,6 +156,78 @@ class GradingTask:
         self.image = image
         self.platinum = platinum
         self.ocr_engine = ocr_engine
+        self.raw_extracted_text = None
+
+def special_base_names(extract_text: str, weapon_name: str):
+    all_special_base_names = [
+        "Dakra Prime","Reaper Prime","Gotva Prime","Euphona Prime",
+        "Tenet Agendus","Tenet Exec","Tenet Grigori","Tenet Livia","Tenet Envoy","Tenet Diplos","Tenet Spirex",
+        "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
+        "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
+        "Dex Dakra","Dex Nikana",
+        "Dragon Nikana","Mutalist Cernos","Mutalist Quanta","Proboscis Cernos"
+    ]
+    
+    for wp in all_special_base_names:
+        if wp in weapon_name:
+            return True, wp
+        
+        temp_wp = wp.replace(" ", "")
+        if temp_wp in extract_text:
+            return True, wp
+            
+    return False, wp
+    
+def get_base_weapon_name(full_name: str) -> str:
+    
+    is_special_base_names, wp = special_base_names("", full_name)
+    if wp == full_name:
+        return full_name
+    
+    """Extracts base weapon name by removing known variant suffixes"""
+    variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1"]
+    base_name = full_name
+        
+    for variant in variants:
+        if variant in full_name:
+            base_name = full_name.replace(variant, "").strip()
+            break
+        
+    return base_name
+
+def get_available_variants(file_path: str, base_weapon_name: str) -> list:
+    """
+    Returns a list of available variants for a weapon from weapon_data.txt
+    Args:
+        file_path: Path to weapon_data.txt
+        base_weapon_name: The weapon name (e.g., "Braton")
+    Returns:
+        List of variant names (e.g., ["Braton", "Braton Prime", "Braton Vandal"])
+    """
+    try:
+        data = load_weapon_data(file_path)
+        variants = set()
+        
+        # Standard variants to check for
+        # variant_types = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1"]
+        
+        # Check for base name and all variants
+        for weapon in data.get("ExportWeapons", []):
+            weapon_name = weapon['name']
+            
+            # Check if weapon matches base name or any variant pattern
+            if base_weapon_name in weapon_name:
+                is_special_base_names, wp = special_base_names("", weapon_name)
+                if not is_special_base_names:
+                    variants.add(weapon_name)
+        
+        # Convert to list and sort with base name first
+        variants = sorted(list(variants), key=lambda x: (x != base_weapon_name, x))
+        return variants
+    
+    except Exception as e:
+        print(f"Error getting variants: {e}")
+        return [base_weapon_name]  # Fallback to just the base name
 
 async def get_sheet_data(sheet_path, sheet_url):
     # Check if the file exists
@@ -145,7 +313,7 @@ async def ocr_space_file(filename):
     try:
         payload = {
             "isOverlayRequired": False,
-            "apikey": "K86055554288957",
+            "apikey": ocr_api,
             "language": "eng",
             "ocrengine": "2",
             "scale": "true",
@@ -161,14 +329,17 @@ async def ocr_space_file(filename):
 
         # Decode the response and extract "ParsedText"
         response_data = json.loads(r.content.decode())
+        
         parsed_results = response_data.get("ParsedResults", [])
         if parsed_results:
             parsed_text = parsed_results[0].get("ParsedText", "")
             return parsed_text  # Return only the parsed text
-        return ""  # Return an empty string if no text is parsed
+        else:
+            return ""  # Return an empty string if no text is parsed
 
     except Exception as e:
-        return f"OCRSpace process failed: {e}"  # Handle any exceptions
+        print(f"OCRSpace process failed: {e}")   # Handle any exceptions
+        return "failed"
 
 async def check_ocr_space_api():
     url = "https://status.ocr.space/"
@@ -186,7 +357,7 @@ async def check_ocr_space_api():
                         end_index = html.index(end_word, start_index)
                         status_text = html[start_index:end_index].strip()
                         
-                        if "UP" in status_text:
+                        if '<td class="tb_b_right">UP</td>' in status_text:
                             return True, discord.Embed(title="OCR Space API Status", description="✅ UP", color=0x00FF00)
                         else:
                             return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN", color=0xFF0000)
@@ -285,7 +456,7 @@ def is_zaw(weapon_name: str) -> bool:
         # return True
     else:
         return False
-
+        
 def get_type_sentinel_weapon(name: str) -> str:
     if name == "Akaten":
         return "Melee"
@@ -404,10 +575,16 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
         if special_fix not in temp_name:
             continue
         
-        # Check if the extracted_text contains the temp_name
-        if temp_name in extracted_text or temp_name.title() in extracted_text:
+        # Check if special base name
+        is_special_base_names, wp = special_base_names(extracted_text, "")
+        if is_special_base_names:
             weapon_name = weapon['name']
-            
+        # Check if the extracted_text contains the temp_name
+        elif not is_special_base_names:
+            if temp_name in extracted_text or temp_name.title() in extracted_text:
+                weapon_name = weapon['name']
+        
+        if weapon_name != "":
             # Replace the temp_name and text before it in the extracted_text
             if weapon_name == "Lex" and "Lexi" in extracted_text: #bug fix for lex and lexi
                 match = re.search(r'(Lex)(?=Lexi)', extracted_text)
@@ -833,6 +1010,46 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
         print(f" Can't find this stat : {stat}")
         # raise ValueError(f"Base stat ERROR or not exist: {stat}")
 
+def get_riven_rank(riven_stat_details) -> str:
+    """
+    Determines if a Riven is unranked or maxed by comparing stat values.
+    Returns "Unranked" or "Maxed".
+    """
+    # We need at least one valid stat to check
+    valid_stats = 0
+    unranked_votes = 0
+    maxed_votes = 0
+    
+    for i in range(riven_stat_details.StatCount):
+        if riven_stat_details.StatName[i] == "":
+            continue
+        
+        if "Damage to" in riven_stat_details.StatName[i]:
+            # Damage to faction needs special handling since values are different
+            continue  # Skip these stats for rank detection        
+        
+        current_value = abs(riven_stat_details.Value[i])
+        valid_stats += 1
+        
+        # Calculate what the value would be if this were an unranked Riven
+        potential_maxed_value = current_value * 9
+        
+        # Check if the scaled value makes sense for a maxed Riven
+        # (Most Riven stats fall between ~20% and ~220% when maxed)
+        if 15 <= potential_maxed_value <= 250:  # Broad but reasonable range
+            unranked_votes += 1
+        else:
+            maxed_votes += 1
+    
+    # Need at least one valid stat to make determination
+    if valid_stats == 0:
+        return "Maxed"  # Default to maxed if we can't determine
+    
+    # If majority of stats suggest unranked, return unranked
+    if unranked_votes > maxed_votes:
+        return "Unranked"
+    return "Maxed"
+
 def calculate_stats(riven_stat_details, weapon_type, weapon_dispo):
     if riven_stat_details.RivenType == "2 Buff 0 Curse":
         for i in range(riven_stat_details.StatCount):
@@ -980,14 +1197,14 @@ def get_grade_new(normalize):
             
 def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
     for i in range(riven_stat_details.StatCount):
-        if riven_rank == "Unranked":
-            temp_value = riven_stat_details.Value[i] * 9
-        else:
-            temp_value = riven_stat_details.Value[i]
+        # if riven_rank == "Unranked":
+            # temp_value = riven_stat_details.Value[i] * 9
+        # else:
+            # temp_value = riven_stat_details.Value[i]
         
         mid_value = (riven_stat_details.Min[i] + riven_stat_details.Max[i]) / 2
         mid_value = round(mid_value, 1)
-        normalize = (temp_value / mid_value) * 100 - 100
+        normalize = (riven_stat_details.Value[i] / mid_value) * 100 - 100
         normalize = round(normalize, 3)
         
         if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
@@ -1260,23 +1477,37 @@ def check_out_range(riven_stat_details):
     out_range_faction = False
     
     for i in range(riven_stat_details.StatCount):
-        if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
-            if "Damage to" in riven_stat_details.StatName[i]:
-                out_range_faction = True
+        
+        if "Damage to" in riven_stat_details.StatName[i]:
+            # print(f"!!!!!!!!!!!!!!!!!!!!!!!")
+            # print(f" Damage to Faction VALUE TO CHECK OUT RANGE : {riven_stat_details.Value[i]}")
+            # print(f"!!!!!!!!!!!!!!!!!!!!!!!")
+            if riven_stat_details.Value[i] >= 1:
+                if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
+                    out_range_faction = True
             else:
+                if riven_stat_details.Value[i] > riven_stat_details.Min[i] or riven_stat_details.Value[i] < riven_stat_details.Max[i]:
+                    out_range_faction = True
+            
+        else:
+            if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
                 out_range = True
+            
+        # if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
+            # if "Damage to" in riven_stat_details.StatName[i]:
+                # print("!!!!!!!!!!!!!!!!!!!!!!!!!")
+                # print(f"MIN : {riven_stat_details.Min[i]}\nVALUE : {riven_stat_details.Value[i]}\nMAX : {riven_stat_details.Max[i]}")
+                # print("!!!!!!!!!!!!!!!!!!!!!!!!!")
+                # out_range_faction = True
+            # else:
+                # out_range = True
     
     return out_range, out_range_faction
 
-async def process_grading(task: GradingTask):
+async def process_grading(task: GradingTask, is_edit: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
         try:
             task_id = str(uuid.uuid4())[:8]
-            # Check if the uploaded file is an image
-            # Handle the image file directly
-            # if not isinstance(task.image, discord.File):
-                # await task.interaction.followup.send("Invalid image format!")
-                # return
                 
             # Convert image to JPEG
             output_riven = f"riven_image_{task_id}.jpg"
@@ -1293,18 +1524,22 @@ async def process_grading(task: GradingTask):
             await get_sheet_data(sheet_path, sheet_url)
     
             # Process the image using OCR API
-            if task.ocr_engine == "OCR Space":
-                extracted_text = await ocr_space_file(output_riven)
-            # else:
-                # extracted_text = await tesseract_ocr(output_riven)
-            # else: #task.ocr_engine == "EasyOCR":
-                # extracted_text = await easy_ocr(output_riven)
-            print(f"RAW extracted_text : {extracted_text}")
-            # return
-            if "OCRSpace process failed" in extracted_text or "Error" in extracted_text:
-                await task.interaction.followup.send(discord.Embed(title="Failed❌", description=extracted_text, color=0xFF0000))
-                await interaction.channel.send("Please try again.")
+            # Skip OCR if raw_extracted_text already exists (regrade case)
+            if task.raw_extracted_text is None:
+                # Process the image using OCR API
+                if task.ocr_engine == "OCR Space":
+                    extracted_text = await ocr_space_file(output_riven)
+                    task.raw_extracted_text = extracted_text  # Store the raw OCR result
+                print(f"RAW extracted_text : {extracted_text}")
+            else:
+                extracted_text = task.raw_extracted_text  # Use stored OCR result for regrade
+                print(f"Using stored OCR result for regrade: {extracted_text}")
+                
+            if extracted_text == "failed":
+                await task.interaction.followup.send(embed=discord.Embed(title="OCR Space API Status",description="❌Time out!",color=discord.Color.red()))
+                await task.interaction.channel.send("Please try again later.")
                 return
+            # return
     
             # Check if the image is Riven Mod
             if is_riven(extracted_text) == False:
@@ -1353,7 +1588,7 @@ async def process_grading(task: GradingTask):
                 return
     
             if task.weapon_type == "Kitgun":
-                await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Please specify the weapon type manually.")  # Use followup
+                await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Kitguns are currently not supported for grading—this is temporary.")  # Use followup
                 return
     
             column_positive = ''
@@ -1422,7 +1657,7 @@ async def process_grading(task: GradingTask):
                 notes = ""
         
             if found:
-                add_text = f"**Recommended rolls for {weapon_name}**\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+                add_text = f"**Recommended rolls for {weapon_name}**[ (source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
             else:
                 add_text = f""
     
@@ -1472,8 +1707,9 @@ async def process_grading(task: GradingTask):
     
             # Get Min Max
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
-    
-            # Divide Min Max by 9 if riven_rank is Unranked
+            
+            # Get rank rand Divide Min Max by 9 if riven_rank is Unranked
+            task.riven_rank = get_riven_rank(riven_stat_details)
             if task.riven_rank == "Unranked":
                 for i in range(riven_stat_details.StatCount):
                     riven_stat_details.Min[i] /= 9
@@ -1493,7 +1729,40 @@ async def process_grading(task: GradingTask):
             # return
             # Create image grading
             # global output_path
-            # Create grading image - now passing the file path directly
+            
+            # Check if out if range
+            out_range, out_range_faction = check_out_range(riven_stat_details)
+            # print("!!!!!!!!!!!!!!!!!!!")
+            # print(f"weapon_name BEFORE GET BASE NAME : {weapon_name}")
+            # print("!!!!!!!!!!!!!!!!!!!")
+            base_name = get_base_weapon_name(weapon_name)
+            # print("!!!!!!!!!!!!!!!!!!!")
+            # print(f"bese_name : {weapon_name}")
+            # print("!!!!!!!!!!!!!!!!!!!")
+            variants = get_available_variants(file_path, base_name)
+            # print("!!!!!!!!!!!!!!!!!!!")
+            # print(f"variant available : {variants}")
+            # print("!!!!!!!!!!!!!!!!!!!")
+            if out_range == True and len(variants) > 1:
+                add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
+            else:
+                add_text_2 = ""
+                
+            if out_range == True:
+                title_text = "GRADING FAILED ❌"
+                description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+            elif out_range == False and out_range_faction == True:
+                title_text = "GRADING SUCCESS ✅️"
+                description_text = f"{task.interaction.user.mention}\n▶ Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
+            else:
+                title_text = "GRADING SUCCESS ✅️"
+                description_text = f"{task.interaction.user.mention}\n{add_text}"
+            
+            embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
+            # Add a footer to the embed
+            embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
+            
+            # Create grading image
             output_path = await create_grading_image(
                 riven_stat_details, 
                 weapon_name, 
@@ -1501,32 +1770,36 @@ async def process_grading(task: GradingTask):
                 output_riven,  # Pass the file path directly
                 task.platinum
             )
-    
-            # Check if out if range
-            out_range, out_range_faction = check_out_range(riven_stat_details)
-    
-            if out_range == True:
-                title_text = "GRADING FAILED ❌"
-                description_text = f"{task.interaction.user.mention}\nThere's a stat that is out of range. You may have selected the **wrong weapon variant or riven rank**. If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
-            elif out_range == False and out_range_faction == True:
-                title_text = "GRADING SUCCESS ✅️"
-                description_text = f"{task.interaction.user.mention}\nDamage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
-            else:
-                title_text = "GRADING SUCCESS ✅️"
-                description_text = f"{task.interaction.user.mention}\n{add_text}"
-    
-            embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
-            # Add a footer to the embed
-            embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
-            # Ensure the image path is valid
+            # Return the path if this is an edit operation
+            if is_edit:
+                return output_path, embed
             
-            await task.interaction.followup.send(file=discord.File(output_path), embed=embed)
+            # Create and send the view with the original message reference
+            with open(output_path, 'rb') as f:
+                file = discord.File(f)
+                message = await task.interaction.followup.send(
+                    file=file,
+                    embed=embed
+                )
+                
+            # Edit the message to add the view after it's created
+            if len(variants) > 1:  # More than just the base variant
+                # Create and add the view
+                view = RegradeView(
+                    original_message=message,
+                    original_image_path=output_riven,
+                    weapon_name=weapon_name,
+                    platinum=task.platinum
+                )
+                view.current_variant = task.weapon_variant
+                view.variant = task.weapon_variant
+                view.original_task = task
             
-            # try:
-                # os.remove(output_riven)
-                # os.remove(output_path)
-            # except:
-                # pass
+                # Set dropdown defaults
+                for option in view.variant_select.options:
+                    option.default = (option.value == task.weapon_variant)
+            
+                await message.edit(view=view)
             
         except Exception as e:
             print(f"Grading error: {e}")
@@ -1534,14 +1807,6 @@ async def process_grading(task: GradingTask):
                 await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
             except:
                 print("Failed to send error")
-        # finally:
-            # # Clean up files
-            # for f in [output_riven, output_path]:
-                # if os.path.exists(f):
-                    # try:
-                        # os.remove(f)
-                    # except:
-                        # pass
         
 @tree.command(name="crop", description="Auto crop Riven mod.")
 async def crop_riven(interaction: discord.Interaction, image: discord.Attachment):
@@ -1570,7 +1835,7 @@ async def crop_riven(interaction: discord.Interaction, image: discord.Attachment
                 cls_id = int(box.cls[0])
                 name = model.names[cls_id]
 
-                if name == "riven_mod":
+                if name == "riven_mod" and float(box.conf[0]) > 0.5:
                     # Get bounding box and crop
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     cropped = pil_img.crop((x1, y1, x2, y2))
@@ -1631,43 +1896,14 @@ async def status(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name="grading", description="Grading a Riven mod.")
-@app_commands.choices(
-    weapon_variant=[
-        app_commands.Choice(name="Normal", value="Normal"),
-        app_commands.Choice(name="Prime", value="Prime"),
-        app_commands.Choice(name="Prisma", value="Prisma"),
-        app_commands.Choice(name="Wraith", value="Wraith"),
-        app_commands.Choice(name="Tenet", value="Tenet"),
-        app_commands.Choice(name="Kuva", value="Kuva"),
-        app_commands.Choice(name="Coda", value="Coda"),
-        app_commands.Choice(name="Vandal", value="Vandal"),
-        app_commands.Choice(name="Rakta", value="Rakta"),
-        app_commands.Choice(name="Telos", value="Telos"),
-        app_commands.Choice(name="Vaykor", value="Vaykor"),
-        app_commands.Choice(name="Sancti", value="Sancti"),
-        app_commands.Choice(name="Secura", value="Secura"),
-        app_commands.Choice(name="Synoid", value="Synoid"),
-        app_commands.Choice(name="Dex", value="Dex"),
-        app_commands.Choice(name="MK1", value="MK1"),
-    ],
-    
-    weapon_type=[
-        app_commands.Choice(name="Auto Detect (except Kitguns)", value="Auto"),
-        app_commands.Choice(name="Rifle", value="Rifle"),
-        app_commands.Choice(name="Shotgun", value="Shotgun"),
-        app_commands.Choice(name="Pistol", value="Pistol"),
-        app_commands.Choice(name="Melee", value="Melee"),
-        app_commands.Choice(name="Archgun", value="Archgun"),
-    ],
-    
-    riven_rank=[
-        app_commands.Choice(name="Maxed", value="Maxed"),
-        app_commands.Choice(name="Unranked", value="Unranked"),
-    ]
-)
-async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_type: str, riven_rank: str, image: discord.Attachment, platinum: str = None):
+async def grading(interaction: discord.Interaction, image: discord.Attachment, platinum: str = None):
     try:
         await interaction.response.defer(thinking=True)
+        
+        # Set default values
+        weapon_variant = "Normal"
+        weapon_type = "Auto"
+        riven_rank = "Auto"
         
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
@@ -1693,7 +1929,7 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
                     cls_id = int(box.cls[0])
                     name = model.names[cls_id]
 
-                    if name == "riven_mod":
+                    if name == "riven_mod" and float(box.conf[0]) > 0.5:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         cropped = pil_img.crop((x1, y1, x2, y2))
                         crops.append(cropped)
@@ -1737,13 +1973,6 @@ async def grading(interaction: discord.Interaction, weapon_variant: str, weapon_
                     await interaction.followup.send(f"❌ Failed to process Riven mod #{i+1}")
                 except Exception as send_error:
                     print(f"Failed to send error: {send_error}")
-            # finally:
-                # # Ensure file is closed and deleted
-                # if temp_filename and os.path.exists(temp_filename):
-                    # try:
-                        # os.remove(temp_filename)
-                    # except Exception as e:
-                        # print(f"Couldn't delete {temp_filename}: {e}")
 
     except Exception as e:
         print(f"Error in grading command: {e}")
