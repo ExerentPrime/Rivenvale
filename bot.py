@@ -69,6 +69,7 @@ class RegradeView(discord.ui.View):
                     value = "Normal"
                 else:
                     display_name = variant.replace(base_name, "").strip()
+                    display_name = display_name.replace("-", "")
                     value = display_name
             
             variant_options.append(
