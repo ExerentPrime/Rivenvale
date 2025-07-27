@@ -1935,6 +1935,19 @@ async def status(interaction: discord.Interaction):
 
 @tree.command(name="grading", description="Grading a Riven mod.")
 async def grading(interaction: discord.Interaction, image: discord.Attachment, platinum: str = None):
+    # Allowed image extensions
+    allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+    
+    # Get file extension
+    file_extension = os.path.splitext(image.filename)[1].lower()
+    
+    if file_extension not in allowed_extensions:
+        await interaction.response.send_message(
+            "Please upload an image file.",
+            ephemeral=True
+        )
+        return
+    
     try:
         await interaction.response.defer(thinking=True)
         
