@@ -45,8 +45,8 @@ class RegradeView(discord.ui.View):
         self.original_image_path = original_image_path
         self.weapon_name = weapon_name
         self.platinum = platinum
-        self.current_variant = "Normal"  # Initialize with default values
-        self.variant = "Normal"  # Ensure this attribute exists
+        self.current_variant = "Secondary" if is_kitgun(weapon_name) else "Normal"  # Kitgun default is Secondary
+        self.variant = self.current_variant  # Ensure this attribute exists
         
         # Get base weapon name (remove variant if present)
         base_name = get_base_weapon_name(weapon_name)
@@ -58,13 +58,18 @@ class RegradeView(discord.ui.View):
         # Create variant dropdown options
         variant_options = []
         for variant in variants:
-            # Determine display name
-            if variant == base_name:
-                display_name = "Normal"
-                value = "Normal"
-            else:
-                display_name = variant.replace(base_name, "").strip()
+            # For Kitguns, use simple Secondary/Primary labels
+            if is_kitgun(weapon_name):
+                display_name = variant
                 value = display_name
+            else:
+                # Normal variant handling
+                if variant == base_name:
+                    display_name = "Normal"
+                    value = "Normal"
+                else:
+                    display_name = variant.replace(base_name, "").strip()
+                    value = display_name
             
             variant_options.append(
                 discord.SelectOption(label=display_name, value=value)
@@ -203,8 +208,13 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
         base_weapon_name: The weapon name (e.g., "Braton")
     Returns:
         List of variant names (e.g., ["Braton", "Braton Prime", "Braton Vandal"])
+        For Kitguns: ["Secondary", "Primary"]
     """
     try:
+        # Special handling for Kitguns
+        if is_kitgun(base_weapon_name):
+            return ["Secondary", "Primary"]
+            
         data = load_weapon_data(file_path)
         variants = set()
         
@@ -598,6 +608,12 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
                 
             weapon_name_found = True
             
+            # For Kitguns, set default type based on variant
+            if is_kitgun(weapon_name):
+                if weapon_type == "Auto":
+                    weapon_type = "Pistol"  # Default to Secondary
+                    return weapon_name, weapon_name_found, weapon_type, extracted_text
+            
             # Get weapon type
             if weapon_type == "Auto":
                 temp_type = weapon['productCategory']
@@ -650,6 +666,9 @@ def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weap
     return weapon_dispo, weapon_name
     
 def combine_with_variant(weapon_name: str, weapon_variant: str) -> str:
+    if is_kitgun(weapon_name):
+        return weapon_name
+    
     if weapon_variant == "Prime":
         if "Prime" not in weapon_name:
             if "Pangolin" in weapon_name:
@@ -1232,7 +1251,7 @@ def get_grade_color(grade):
     
     return grade_colors.get(grade, "White")
 
-async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_file, platinum):
+async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_file, platinum, weapon_variant):
     # Set file paths
     global background_path
     global font_path
@@ -1246,7 +1265,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         riven_image = Image.open(image_file)
     elif isinstance(image_file, discord.File):
         # Input is discord.File - save to temp file
-        temp_path = f"temp_input_{uuid.uuid4().hex}.jpg"
+        temp_path = f"temp_input_{str(uuid.uuid4())[:8]}.jpg"
         with open(temp_path, "wb") as f:
             await image_file.save(f)
         riven_image = Image.open(temp_path)
@@ -1298,6 +1317,11 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         draw.text((x_position, 280), platinum_text, fill="#826aa6", font=platinum_font)
     
     # Draw weapon name
+    if weapon_variant == "Primary": #for kitgun only
+        weapon_name = f"{weapon_name} (P)"
+    elif weapon_variant == "Secondary": #for kitgun only
+        weapon_name = f"{weapon_name} (S)" 
+    
     weapon_name = weapon_name.upper()
     weapon_textbox = (354, 20, 655, 40)
     text_bbox = draw.textbbox((0, 0), weapon_name, font=default_font)
@@ -1455,7 +1479,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
 
     # Save the resulting image
     # global output_path
-    output_path = f"riven_image_grade_{uuid.uuid4().hex}.jpg"
+    output_path = f"riven_image_grade_{str(uuid.uuid4())[:8]}.jpg"
     background = background.convert("RGB")
     background.save(output_path, format="JPEG", dpi=(dpi, dpi))
     return output_path
@@ -1506,11 +1530,9 @@ def check_out_range(riven_stat_details):
 
 async def process_grading(task: GradingTask, is_edit: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
-        try:
-            task_id = str(uuid.uuid4())[:8]
-                
+        try:  
             # Convert image to JPEG
-            output_riven = f"riven_image_{task_id}.jpg"
+            output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
             await convert_image_to_jpg(task.image, output_riven)
     
             # Get all weapon data (download and save txt file)
@@ -1586,7 +1608,22 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 os.remove(output_riven)
                 return
-    
+            
+            # For Kitguns, set weapon type based on selected variant
+            if is_kitgun(weapon_name):
+                if is_edit == False:
+                    task.weapon_variant = "Secondary"
+                
+                if task.weapon_variant == "Primary":
+                    if weapon_name == "Catchmoon":
+                        task.weapon_type = "Shotgun"
+                    elif weapon_name == "Sporelacer":
+                        task.weapon_type = "Shotgun"
+                    else:
+                        task.weapon_type = "Rifle"
+                else:  # Secondary
+                    task.weapon_type = "Pistol"
+            
             if task.weapon_type == "Kitgun":
                 await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Kitguns are currently not supported for grading—this is temporary.")  # Use followup
                 return
@@ -1768,7 +1805,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 weapon_name, 
                 weapon_dispo, 
                 output_riven,  # Pass the file path directly
-                task.platinum
+                task.platinum,
+                task.weapon_variant
             )
             # Return the path if this is an edit operation
             if is_edit:
@@ -1841,7 +1879,7 @@ async def crop_riven(interaction: discord.Interaction, image: discord.Attachment
                     cropped = pil_img.crop((x1, y1, x2, y2))
 
                     # Save locally
-                    unique_name = f"riven_image_crop_{uuid.uuid4().hex}.jpg"
+                    unique_name = f"riven_image_crop_{str(uuid.uuid4())[:8]}.jpg"
                     save_path = f"{unique_name}"
                     # os.makedirs("saved_crops", exist_ok=True)
                     cropped.save(save_path, format="JPEG", quality=95)
@@ -1951,7 +1989,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment, p
             temp_filename = None
             try:
                 # Save crop to temporary file
-                temp_filename = f"temp_riven_image_{uuid.uuid4().hex}.jpg"
+                temp_filename = f"riven_image_temp_{str(uuid.uuid4())[:8]}.jpg"
                 crop.save(temp_filename, "JPEG")
                 
                 # Create task with file path
