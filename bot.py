@@ -191,7 +191,7 @@ def get_base_weapon_name(full_name: str) -> str:
         return full_name
     
     """Extracts base weapon name by removing known variant suffixes"""
-    variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1"]
+    variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
     base_name = full_name
         
     for variant in variants:
@@ -1770,9 +1770,9 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             
             # Check if out if range
             out_range, out_range_faction = check_out_range(riven_stat_details)
-            # print("!!!!!!!!!!!!!!!!!!!")
-            # print(f"weapon_name BEFORE GET BASE NAME : {weapon_name}")
-            # print("!!!!!!!!!!!!!!!!!!!")
+            print("!!!!!!!!!!!!!!!!!!!")
+            print(f"weapon_name BEFORE GET BASE NAME : {weapon_name}")
+            print("!!!!!!!!!!!!!!!!!!!")
             base_name = get_base_weapon_name(weapon_name)
             # print("!!!!!!!!!!!!!!!!!!!")
             # print(f"bese_name : {weapon_name}")
@@ -1781,12 +1781,17 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # print("!!!!!!!!!!!!!!!!!!!")
             # print(f"variant available : {variants}")
             # print("!!!!!!!!!!!!!!!!!!!")
-            if out_range == True and len(variants) > 1:
-                add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
-            else:
-                add_text_2 = ""
-                
+            # if out_range == True and len(variants) > 1:
+                # add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
+            # else:
+                # add_text_2 = ""
+            print(f"Variant RANGE : {len(variants)} ::::: {variants}")    
             if out_range == True:
+                if len(variants) > 1:
+                    add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
+                else:
+                    add_text_2 = ""
+                    
                 title_text = "GRADING FAILED ❌"
                 description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If your Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
             elif out_range == False and out_range_faction == True:
