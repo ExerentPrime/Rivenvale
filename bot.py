@@ -180,9 +180,9 @@ def special_base_names(extract_text: str, weapon_name: str):
         
         temp_wp = wp.replace(" ", "")
         if temp_wp in extract_text:
-            return True, wp
+            return True, temp_wp
             
-    return False, wp
+    return False, ""
     
 def get_base_weapon_name(full_name: str) -> str:
     
@@ -588,8 +588,9 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
         
         # Check if special base name
         is_special_base_names, wp = special_base_names(extracted_text, "")
-        if is_special_base_names:
+        if is_special_base_names and temp_name == wp:
             weapon_name = weapon['name']
+            temp_name = wp
         # Check if the extracted_text contains the temp_name
         elif not is_special_base_names:
             if temp_name in extracted_text or temp_name.title() in extracted_text:
@@ -794,15 +795,26 @@ def get_value_and_stat_name(extracted_text, riven_stat_details):
         match = matches[i][0]  # Full match
         
         # Split numeric value and stat name using a custom approach
-        numeric_value = re.search(r"(\+?\d+(\.\d+)?)", match).group(1)
+        numeric_value_match = re.search(r"(\+?\d+(\.\d+)?)", match)
+        if numeric_value_match:
+            numeric_value = numeric_value_match.group(1)
+        else:
+            numeric_value = None  # Set None if no numeric value found
+        
         temp_name = match[len(numeric_value):]  # The remainder is the stat name
         
-        if get_stat_name(temp_name) != "can't find stat name": 
-            stat_name = get_stat_name(temp_name)
+        stat_name = get_stat_name(temp_name)
+        if stat_name == "can't find stat name":
+            stat_name = None  # If not found, set stat_name to None
         
+        if numeric_value:
             # Safely store the results in riven_stat_details
             riven_stat_details.Value[i] = float(numeric_value) if numeric_value else 0.0
-            riven_stat_details.StatName[i] = stat_name if stat_name else ""
+        else:
+            riven_stat_details.Value[i] = 0.0  # Set to 0 if no numeric value
+        
+        # Only set stat name if it's valid
+        riven_stat_details.StatName[i] = stat_name if stat_name else ""
         
         # Print the extracted stats to the console
         # print(f"Stat {i+1}: {riven_stat_details.Value[i]} {riven_stat_details.StatName[i]}")
@@ -1028,6 +1040,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
             return 80.1
     else:
         print(f" Can't find this stat : {stat}")
+        return 0.0
         # raise ValueError(f"Base stat ERROR or not exist: {stat}")
 
 def get_riven_rank(riven_stat_details) -> str:
@@ -1189,7 +1202,7 @@ def damage_to_faction_fix(riven_stat_details, i):
             riven_stat_details.Value[i] = (1 - riven_stat_details.Value[i]) * 100
 
 def get_grade_new(normalize):
-    if normalize <= -9.5:
+    if -11.5 < normalize <= -9.5:
         return "F"
     elif -9.5 < normalize <= -7.5:
         return "C-"
@@ -1209,11 +1222,11 @@ def get_grade_new(normalize):
         return "A"
     elif 7.5 < normalize <= 9.5:
         return "A+"
-    elif normalize > 9.5:
+    elif 9.5 < normalize <= 11.5:
         return "S"
     else:
         # print("GRADING ERROR. Make sure weapon variant selected is correct")
-        return "ERR"
+        return "??"
             
 def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
     for i in range(riven_stat_details.StatCount):
@@ -1247,7 +1260,8 @@ def get_grade_color(grade):
         "C+": "#ed7400",
         "C": "#f65901",
         "C-": "#fc3800",
-        "F": "#ff0200"
+        "F": "#ff0200",
+        "??": "#808080"
     }
     
     return grade_colors.get(grade, "White")
@@ -1742,7 +1756,10 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # Damage to Faction value correction - convert to percentage
             for i in range(riven_stat_details.StatCount):
                 damage_to_faction_fix(riven_stat_details, i)
-    
+                
+            # print(f"riven_stat_details value : {riven_stat_details.Value}")
+            # print(f"riven_stat_details stat name : {riven_stat_details.StatName}")
+            
             # Get Min Max
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
             
