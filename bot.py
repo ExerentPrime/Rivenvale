@@ -12,6 +12,7 @@ import uuid
 from ultralytics import YOLO
 import cv2
 import numpy as np
+import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -1237,9 +1238,10 @@ def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
         
         mid_value = (riven_stat_details.Min[i] + riven_stat_details.Max[i]) / 2
         mid_value = round(mid_value, 1)
+        # print(f"MID VALUE {i+1} : {mid_value}")
         normalize = (riven_stat_details.Value[i] / mid_value) * 100 - 100
         normalize = round(normalize, 3)
-        
+        # print(f"normalize VALUE {i+1} : {normalize}")
         if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
             riven_stat_details.Grade[i] = get_grade_new(-normalize)
             print(f"Grade Value Curse : {-normalize}")
@@ -1397,7 +1399,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         position = statname_data["position"]
         if "999.9" not in statname_text:
             draw.text(position, statname_text, fill="white", font=default_font)
-
+    
     # Draw min stats
     # Round to 1 decimal place
     for i in range(riven_stat_details.StatCount):
@@ -1491,7 +1493,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         
         # Update bar_y for spacing
         bar_y = bar_y + 68  # Spacing for bar
-
+    
     # Save the resulting image
     # global output_path
     output_path = f"riven_image_grade_{str(uuid.uuid4())[:8]}.jpg"
@@ -1500,7 +1502,9 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
     return output_path
 
 def bar_resize(min_value: float, max_value: float, value: float) -> float:
-    if value > max_value:
+    if max_value == min_value:
+        return 0.5
+    elif value > max_value:
         return 1
     elif value < min_value:
         return 0
@@ -1510,7 +1514,6 @@ def bar_resize(min_value: float, max_value: float, value: float) -> float:
         percent = temp / diff
         return percent
 
-
 def check_out_range(riven_stat_details):
     out_range = False
     out_range_faction = False
@@ -1518,9 +1521,7 @@ def check_out_range(riven_stat_details):
     for i in range(riven_stat_details.StatCount):
         
         if "Damage to" in riven_stat_details.StatName[i]:
-            # print(f"!!!!!!!!!!!!!!!!!!!!!!!")
-            # print(f" Damage to Faction VALUE TO CHECK OUT RANGE : {riven_stat_details.Value[i]}")
-            # print(f"!!!!!!!!!!!!!!!!!!!!!!!")
+            
             if riven_stat_details.Value[i] >= 1:
                 if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
                     out_range_faction = True
@@ -1529,18 +1530,9 @@ def check_out_range(riven_stat_details):
                     out_range_faction = True
             
         else:
-            if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
+            if riven_stat_details.Value[i] < round(riven_stat_details.Min[i], 1) or riven_stat_details.Value[i] > round(riven_stat_details.Max[i], 1):
                 out_range = True
             
-        # if riven_stat_details.Value[i] < riven_stat_details.Min[i] or riven_stat_details.Value[i] > riven_stat_details.Max[i]:
-            # if "Damage to" in riven_stat_details.StatName[i]:
-                # print("!!!!!!!!!!!!!!!!!!!!!!!!!")
-                # print(f"MIN : {riven_stat_details.Min[i]}\nVALUE : {riven_stat_details.Value[i]}\nMAX : {riven_stat_details.Max[i]}")
-                # print("!!!!!!!!!!!!!!!!!!!!!!!!!")
-                # out_range_faction = True
-            # else:
-                # out_range = True
-    
     return out_range, out_range_faction
 
 async def process_grading(task: GradingTask, is_edit: bool = False):
@@ -1736,7 +1728,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             riven_stat_details.StatCount = get_stat_count(riven_stat_details)
             riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
             get_riven_type(riven_stat_details)
-    
+            # print(f"Riven Type : {riven_stat_details.RivenType}")
             if riven_stat_details.RivenType == "Unknown Riven Type":
                 await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
@@ -1764,12 +1756,14 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
             
             # Get rank rand Divide Min Max by 9 if riven_rank is Unranked
-            task.riven_rank = get_riven_rank(riven_stat_details)
+            if task.riven_rank == "Auto":
+                task.riven_rank = get_riven_rank(riven_stat_details)
+                
             if task.riven_rank == "Unranked":
                 for i in range(riven_stat_details.StatCount):
                     riven_stat_details.Min[i] /= 9
                     riven_stat_details.Max[i] /= 9
-    
+                    
             # Get Prefix and Unit
             get_prefix_and_unit(riven_stat_details)
     
@@ -1803,14 +1797,17 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # else:
                 # add_text_2 = ""
             # print(f"Variant RANGE : {len(variants)} ::::: {variants}")    
+            # print(f"MIN : {riven_stat_details.Min}")
+            # print(f"MAX : {riven_stat_details.Max}")
+            # print(f"Stat Count : {riven_stat_details.StatCount}")
+            
             if out_range == True:
                 if len(variants) > 1:
-                    add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
+                    add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147/1398554937776013425) to learn how to identify a Riven’s variant.\n"
                 else:
                     add_text_2 = ""
-                    
                 title_text = "GRADING FAILED ❌"
-                description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+                description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515) \n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
             elif out_range == False and out_range_faction == True:
                 title_text = "GRADING SUCCESS ✅️"
                 description_text = f"{task.interaction.user.mention}\n▶ Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
@@ -1864,6 +1861,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             
         except Exception as e:
             print(f"Grading error: {e}")
+            traceback.print_exc()
             try:
                 await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
             except:
@@ -1957,7 +1955,13 @@ async def status(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name="grading", description="Grading a Riven mod.")
-async def grading(interaction: discord.Interaction, image: discord.Attachment, platinum: str = None):
+@app_commands.choices(
+    riven_rank=[
+        app_commands.Choice(name="Maxed", value="Maxed"),
+        app_commands.Choice(name="Unranked", value="Unranked"),
+    ]
+)
+async def grading(interaction: discord.Interaction, image: discord.Attachment,riven_rank: str = "Auto", platinum: str = None):
     # Allowed image extensions
     allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
     
@@ -1977,7 +1981,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment, p
         # Set default values
         weapon_variant = "Normal"
         weapon_type = "Auto"
-        riven_rank = "Auto"
+        # riven_rank = "Auto"
         
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
