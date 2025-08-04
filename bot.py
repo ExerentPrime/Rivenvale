@@ -68,6 +68,10 @@ class RegradeView(discord.ui.View):
                 if variant == base_name:
                     display_name = "Normal"
                     value = "Normal"
+                # Fix for Pangolin
+                elif "Pangolin" in variant:
+                    display_name = "Prime"
+                    value = display_name
                 else:
                     display_name = variant.replace(base_name, "").strip()
                     display_name = display_name.replace("-", "")
@@ -191,6 +195,10 @@ def get_base_weapon_name(full_name: str) -> str:
     if wp == full_name:
         return full_name
     
+    #fix for Pangolin Sword and Prime
+    if "Pangolin" in full_name:
+        return "Pangolin Sword"
+        
     """Extracts base weapon name by removing known variant suffixes"""
     variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
     base_name = full_name
@@ -199,7 +207,7 @@ def get_base_weapon_name(full_name: str) -> str:
         if variant in full_name:
             base_name = full_name.replace(variant, "").strip()
             break
-        
+    
     return base_name
 
 def get_available_variants(file_path: str, base_weapon_name: str) -> list:
@@ -216,7 +224,11 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
         # Special handling for Kitguns
         if is_kitgun(base_weapon_name):
             return ["Secondary", "Primary"]
-            
+        
+        # Fix for Pangolin
+        if "Pangolin" in base_weapon_name:
+            return ["Pangolin Sword", "Pangolin Prime"]
+        
         data = load_weapon_data(file_path)
         variants = set()
         
@@ -232,9 +244,10 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
                 is_special_base_names, wp = special_base_names("", weapon_name)
                 if not is_special_base_names:
                     variants.add(weapon_name)
-        
+                
         # Convert to list and sort with base name first
         variants = sorted(list(variants), key=lambda x: (x != base_weapon_name, x))
+        print(variants)
         return variants
     
     except Exception as e:
@@ -1583,7 +1596,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # Remove special characters
             extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
     
-            # Remove unnecessary double line text in riven mod
+            # Remove unnecessary text in riven mod
             extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
             extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
             extracted_text = re.sub(r"%[^%]*Heat", "%Heat", extracted_text)
@@ -1593,6 +1606,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             extracted_text = re.sub(r"%[^%]*Impact", "%Impact", extracted_text)
             extracted_text = re.sub(r"%[^%]*Puncture", "%Puncture", extracted_text)
             extracted_text = re.sub(r"%[^%]*Slash", "%Slash", extracted_text)
+            extracted_text = extracted_text.replace("--","-")
             extracted_text = extracted_text.replace("Gell","Geli")
             extracted_text = extracted_text.replace("gell","geli")
             extracted_text = extracted_text.replace("cion","cron")
@@ -1701,7 +1715,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 notes = ""
         
             if found:
-                add_text = f"**Recommended rolls for {weapon_name}**[ (source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+                add_text = f"**Recommended rolls for {weapon_name}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
             else:
                 add_text = f""
     
