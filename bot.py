@@ -247,7 +247,7 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
                 
         # Convert to list and sort with base name first
         variants = sorted(list(variants), key=lambda x: (x != base_weapon_name, x))
-        print(variants)
+        # print(variants)
         return variants
     
     except Exception as e:
