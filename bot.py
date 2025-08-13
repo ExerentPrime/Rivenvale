@@ -1071,7 +1071,9 @@ def get_riven_rank(riven_stat_details) -> str:
         if riven_stat_details.StatName[i] == "":
             continue
         
-        if "Damage to" in riven_stat_details.StatName[i]:
+        skip_stat = ["Damage to Infested", "Damage to Corpus", "Damage to Grineer", "Range", "Initial Combo", "Punch Through"]
+        
+        if riven_stat_details.StatName[i] in skip_stat:
             # Damage to faction needs special handling since values are different
             continue  # Skip these stats for rank detection        
         
@@ -1083,7 +1085,7 @@ def get_riven_rank(riven_stat_details) -> str:
         
         # Check if the scaled value makes sense for a maxed Riven
         # (Most Riven stats fall between ~20% and ~220% when maxed)
-        if 15 <= potential_maxed_value <= 250:  # Broad but reasonable range
+        if 15 <= potential_maxed_value <= 240:  # Broad but reasonable range
             unranked_votes += 1
         else:
             maxed_votes += 1
@@ -1588,14 +1590,17 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 await task.interaction.followup.send("Please upload an image containing only one visible Riven Mod. Do not include any extra text, only the Riven Mod itself.", file=discord.File(output_riven))  # Use followup
                 print(f"is_riven extracted_text : {extracted_text}")
                 return
-    
+            
+            # Replace a space with a dot only if there are numbers on both sides of the space
+            extracted_text = re.sub(r'(\d)\s+(\d)', r'\1.\2', extracted_text)
+            
             # remove all types of whitespace
             extracted_text = "".join(extracted_text.split())
             #print(f"RAW extracted_text : {extracted_text}")
             # return
-            # Remove special characters
-            extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:]", "", extracted_text)
-    
+            # Remove special characters except this
+            extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:\']", "", extracted_text)
+
             # Remove unnecessary text in riven mod
             extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
             extracted_text = re.sub(r"x2forbows", "", extracted_text, flags=re.IGNORECASE)
@@ -1612,6 +1617,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             extracted_text = extracted_text.replace("cion","cron")
             extracted_text = extracted_text.replace("%","")
             extracted_text = extracted_text.replace(",",".")
+            extracted_text = extracted_text.replace("'",".")
             extracted_text = extracted_text.replace(":",".")
     
             # Use regex to remove dots between numbers and letters
@@ -1832,6 +1838,12 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
             # Add a footer to the embed
             embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
+            
+            # Make sure value stat for no stat name is 999.9
+            for i in range(4):
+                if riven_stat_details.StatName[i] == "":
+                    if riven_stat_details.Value[i] != 999.9:
+                        riven_stat_details.Value[i] = 999.9
             
             # Create grading image
             output_path = await create_grading_image(
