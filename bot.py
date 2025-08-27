@@ -1025,78 +1025,176 @@ def get_value_and_stat_name(extracted_text, riven_stat_details):
 def fix_stat_name(extracted_text: str) -> str:
     # Dictionary of shortforms/aliases → full stat name
     replacements = {
-        # Critical
+        # Additional Combo Count Chance
+        "acc": "Additional Combo Count Chance",
+        "accc": "Additional Combo Count Chance",
+        "add": "Additional Combo Count Chance",
+        "addcombo": "Additional Combo Count Chance",
+        "extracombo": "Additional Combo Count Chance",
+        "bonuscombo": "Additional Combo Count Chance",
+        "combochance": "Additional Combo Count Chance",
+
+        # Ammo Maximum
+        "am": "Ammo Maximum",
+        "ammo": "Ammo Maximum",
+        "ammomax": "Ammo Maximum",
+
+        # Attack Speed
+        "as": "Attack Speed",
+        "atkspd": "Attack Speed",
+        "attackspeed": "Attack Speed",
+
+        # Combo Duration
+        "combo": "Combo Duration",
+        "combodur": "Combo Duration",
+
+        # Cold
+        "cold": "Cold",
+        "ice": "Cold",
+        "freeze": "Cold",
+
+        # Critical Chance
         "cc": "Critical Chance",
-        "crit chance": "Critical Chance",
+        "crit": "Critical Chance",
+        "critchance": "Critical Chance",
         "critical": "Critical Chance",
-        "cd": "Critical Damage",
-        "crit dmg": "Critical Damage",
-        "critical damage": "Critical Damage",
+        "cchance": "Critical Chance",
+        "critch": "Critical Chance",
+
+        # Critical Chance for Slide Attack
         "slide": "Critical Chance for Slide Attack",
+        "slidecrit": "Critical Chance for Slide Attack",
+        "slidecc": "Critical Chance for Slide Attack",
+
+        # Critical Damage
+        "cd": "Critical Damage",
+        "critdmg": "Critical Damage",
+        "crtdmg": "Critical Damage",
+        "criticaldamage": "Critical Damage",
+        "critd": "Critical Damage",
+        "critdamage": "Critical Damage",
+
+        # Damage
+        "dmg": "Damage",
+        "damage": "Damage",
+
+        # Damage to Corpus
+        "dtc": "Damage to Corpus",
+        "corpus": "Damage to Corpus",
+
+        # Damage to Grineer
+        "dtg": "Damage to Grineer",
+        "grineer": "Damage to Grineer",
+
+        # Damage to Infested
+        "dti": "Damage to Infested",
+        "infested": "Damage to Infested",
+
+        # Electricity
+        "elec": "Electricity",
+        "electric": "Electricity",
+        "electricity": "Electricity",
+        "shock": "Electricity",
+
+        # Finisher Damage
+        "fd": "Finisher Damage",
+        "finisher": "Finisher Damage",
+        "finisherdmg": "Finisher Damage",
+        "fdmg": "Finisher Damage",
+
+        # Fire Rate
+        "fr": "Fire Rate",
+        "firerate": "Fire Rate",
+
+        # Heat
+        "heat": "Heat",
+        "fire": "Heat",
+
+        # Heavy Attack Efficiency
+        "hae": "Heavy Attack Efficiency",
+        "heavy": "Heavy Attack Efficiency",
+        "heavyatk": "Heavy Attack Efficiency",
+        "heavyattack": "Heavy Attack Efficiency",
+
+        # Impact
+        "impact": "Impact",
+        "imp": "Impact",
+
+        # Initial Combo
+        "ic": "Initial Combo",
+        "initialcombo": "Initial Combo",
+        "initcombo": "Initial Combo",
+        "init": "Initial Combo",
+
+        # Magazine Capacity
+        "mc": "Magazine Capacity",
+        "mag": "Magazine Capacity",
+        "magazine": "Magazine Capacity",
+        "magcap": "Magazine Capacity",
+
+        # Melee Damage
+        "md": "Melee Damage",
+        "melee": "Melee Damage",
+        "meleedmg": "Melee Damage",
 
         # Multishot
         "ms": "Multishot",
         "multi": "Multishot",
+        "multishot": "Multishot",
+        "mshot": "Multishot",
 
-        # Status
-        "sc": "Status Chance",
-        "status": "Status Chance",
-        "sd": "Status Duration",
-        "status dur": "Status Duration",
+        # Projectile Speed
+        "ps": "Projectile Speed",
+        "proj": "Projectile Speed",
+        "projectile": "Projectile Speed",
+        "projspd": "Projectile Speed",
 
-        # Damage types
-        "dmg": "Damage",
-        "damage": "Damage",
-        "md": "Melee Damage",
-        "melee": "Melee Damage",
-        "finisher": "Finisher Damage",
-        "slash": "Slash",
-        "impact": "Impact",
-        "puncture": "Puncture",
-        "toxin": "Toxin",
-        "elec": "Electricity",
-        "electric": "Electricity",
-        "cold": "Cold",
-        "heat": "Heat",
-        "fire": "Heat",
-
-        # Faction damage
-        "dtc": "Damage to Corpus",
-        "corpus": "Damage to Corpus",
-        "dtg": "Damage to Grineer",
-        "grineer": "Damage to Grineer",
-        "dti": "Damage to Infested",
-        "infested": "Damage to Infested",
-
-        # Ammo & magazine
-        "ammo": "Ammo Maximum",
-        "ammo max": "Ammo Maximum",
-        "mag": "Magazine Capacity",
-        "mag cap": "Magazine Capacity",
-
-        # Fire rate / attack speed
-        "fr": "Fire Rate",
-        "firerate": "Fire Rate",
-        "as": "Attack Speed",
-        "atk spd": "Attack Speed",
-
-        # Range & punch
-        "range": "Range",
+        # Punch Through
         "pt": "Punch Through",
         "punch": "Punch Through",
+        "puncthru": "Punch Through",
 
-        # Reload
+        # Puncture
+        "puncture": "Puncture",
+        "punc": "Puncture",
+
+        # Range
+        "range": "Range",
+        "rng": "Range",
+
+        # Reload Speed
         "rs": "Reload Speed",
         "reload": "Reload Speed",
+        "rld": "Reload Speed",
 
-        # Other stats
-        "zoom": "Zoom",
+        # Slash
+        "slash": "Slash",
+        "sl": "Slash",
+
+        # Status Chance
+        "sc": "Status Chance",
+        "status": "Status Chance",
+        "statch": "Status Chance",
+        "stchance": "Status Chance",
+
+        # Status Duration
+        "sd": "Status Duration",
+        "statusdur": "Status Duration",
+        "statusduration": "Status Duration",
+        "stdur": "Status Duration",
+
+        # Toxin
+        "tox": "Toxin",
+        "toxin": "Toxin",
+        "tx": "Toxin",
+
+        # Weapon Recoil
+        "wr": "Weapon Recoil",
         "recoil": "Weapon Recoil",
-        "combo": "Combo Duration",
-        "initial combo": "Initial Combo",
-        "acc": "Additional Combo Count Chance",
-        "proj": "Projectile Speed",
-        "hae": "Heavy Attack Efficiency",
+        "rcl": "Weapon Recoil",
+
+        # Zoom
+        "zoom": "Zoom",
     }
 
     # Split text into tokens (numbers + words can be glued, e.g. "18.6cc")
@@ -2617,7 +2715,9 @@ async def on_ready():
         # Update the weapon name list for autocomplete
         global all_weapon_name
         all_weapon_data = load_weapon_data(file_path)
-        all_weapon_name = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"]]
+        all_weapons = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"] if "<ARCHWING>" not in weapon["name"] and not weapon["name"].isupper()]
+        # Use your existing function to get base names and remove duplicates
+        all_weapon_name = list(set([get_base_weapon_name(name) for name in all_weapons]))
         print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete")
         
     except Exception as e:
