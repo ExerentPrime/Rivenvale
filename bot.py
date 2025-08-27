@@ -2092,7 +2092,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 
             if extracted_text == "failed":
                 await task.interaction.followup.send(embed=discord.Embed(title="OCR Space API Status",description="❌Time out!",color=discord.Color.red()))
-                await task.interaction.channel.send("Please try again later.")
+                await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
                 return
             # return
     
@@ -2547,7 +2547,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
         is_up, status_embed = await check_ocr_space_api()
         if not is_up:
             await interaction.followup.send(embed=status_embed)
-            await interaction.channel.send("Please try again later.")
+            await interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
             return
         
         # First try to detect and crop Riven mods from the image
