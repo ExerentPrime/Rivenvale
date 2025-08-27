@@ -191,7 +191,7 @@ def special_base_names(extract_text: str, weapon_name: str):
         "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
         "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
         "Dex Dakra","Dex Nikana",
-        "Dragon Nikana","Mutalist Cernos","Mutalist Quanta","Proboscis Cernos"
+        "Dragon Nikana","Mutalist Cernos","Mutalist Quanta","Proboscis Cernos","Dual Skana"
     ]
     
     for wp in all_special_base_names:
@@ -2350,7 +2350,12 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 else:
                     add_text_2 = ""
                 title_text = "GRADING FAILED ❌"
-                description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515) \n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+                
+                if task.ocr_engine != "Manual":
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515) \n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+                else:
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is outside the min–max range, it may be due to an incorrect input or because the Riven you are referring to is outdated."
+                    
             elif out_range == False and out_range_faction == True:
                 title_text = "GRADING SUCCESS ✅️"
                 description_text = f"{task.interaction.user.mention}\n▶ Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
