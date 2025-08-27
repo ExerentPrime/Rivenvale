@@ -30,7 +30,7 @@ tree = app_commands.CommandTree(client)
 model = YOLO(r"best.pt")
 sheet_url = "https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8/export?format=xlsx"
 sheet_path = r"roll_data.xlsx"
-weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_ANNFevSHgcBTO0WIEpyj4A"
+weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_bEtI98Hav9NkSKXKNxI9cA"
 file_path = r"weapon_data.txt"
 background_path = r"bg.png"
 font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
@@ -38,16 +38,19 @@ font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
 # output_path = r"riven_grade.png" # Save grade image path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
+all_weapon_name = ""
 
 class RegradeView(discord.ui.View):
-    def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, platinum: str = None):
+    def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, buff_count: int, ocr_engine: str, platinum: str = None):
         super().__init__(timeout=180)  # 3 minute timeout
         self.original_message = original_message
         self.original_image_path = original_image_path
         self.weapon_name = weapon_name
         self.platinum = platinum
         self.current_variant = "Secondary" if is_kitgun(weapon_name) else "Normal"  # Kitgun default is Secondary
-        self.variant = self.current_variant  # Ensure this attribute exists
+        self.variant = self.current_variant  # Ensure this attribute exist
+        self.buff_count = buff_count
+        self.ocr_engine = ocr_engine
         
         # Get base weapon name (remove variant if present)
         base_name = get_base_weapon_name(weapon_name)
@@ -109,7 +112,8 @@ class RegradeView(discord.ui.View):
             riven_rank="Auto",  # Auto-detect rank
             image=self.original_image_path,
             platinum=self.platinum,
-            ocr_engine="OCR Space"
+            ocr_engine=self.ocr_engine,
+            buff_count=self.buff_count
         )
         
         # Get the original task's raw_extracted_text if available
@@ -117,8 +121,17 @@ class RegradeView(discord.ui.View):
             task.raw_extracted_text = self.original_task.raw_extracted_text
         
         # Process the grading and get the new image path
-        new_image_path, new_embed = await process_grading(task, is_edit=True)
+        result = await process_grading(task, is_edit=True)
+    
+        if result is None:
+            await interaction.followup.send(
+                "Failed to regrade with the selected variant. Please try again.",
+                ephemeral=True
+            )
+            return
         
+        new_image_path, new_embed = result
+            
         if new_image_path:
             # Update current variant
             self.current_variant = self.variant
@@ -157,9 +170,10 @@ class RivenStatDetails:
         self.Min = [999.9] * 4   # List of 4 doubles (floating-point numbers)
         self.Max = [999.9] * 4   # List of 4 doubles (floating-point numbers)
         self.Grade = [""] * 4
+        self.Normalize = [0.000] * 4 
 
 class GradingTask:
-    def __init__(self, interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine):
+    def __init__(self, interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine, buff_count):
         self.interaction = interaction
         self.weapon_variant = weapon_variant
         self.weapon_type = weapon_type
@@ -168,10 +182,11 @@ class GradingTask:
         self.platinum = platinum
         self.ocr_engine = ocr_engine
         self.raw_extracted_text = None
+        self.buff_count = buff_count 
 
 def special_base_names(extract_text: str, weapon_name: str):
     all_special_base_names = [
-        "Dakra Prime","Reaper Prime","Gotva Prime","Euphona Prime",
+        "Dakra Prime","Reaper Prime","Gotva Prime","Euphona Prime","Vadarya Prime",
         "Tenet Agendus","Tenet Exec","Tenet Grigori","Tenet Livia","Tenet Envoy","Tenet Diplos","Tenet Spirex",
         "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
         "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
@@ -438,6 +453,171 @@ def get_buff_count(extracted_text: str):
     extracted_text = re.sub(buff_naming_pattern, '', extracted_text)
     # print(f"after get_buff_count > extracted_text : {extracted_text}")
     return buff_count, extracted_text, buff_naming
+
+def get_buff_name(stat_name: str, position: int, buff_count: int) -> str:
+    mapping = {
+        "Additional Combo Count Chance": {
+            2: ["Laci", "nus"],
+            3: ["Laci", "-laci", "nus"]
+        },
+        "Ammo Maximum": {
+            2: ["Ampi", "bin"],
+            3: ["Ampi", "-ampi", "bin"]
+        },
+        "Damage to Corpus": {
+            2: ["Manti", "tron"],
+            3: ["Manti", "-manti", "tron"]
+        },
+        "Damage to Grineer": {
+            2: ["Argi", "con"],
+            3: ["Argi", "-argi", "con"]
+        },
+        "Damage to Infested": {
+            2: ["Pura", "ada"],
+            3: ["Pura", "-pura", "ada"]
+        },
+        "Cold": {
+            2: ["Geli", "do"],
+            3: ["Geli", "-geli", "do"]
+        },
+        "Combo Duration": {
+            2: ["Tempi", "nem"],
+            3: ["Tempi", "-tempi", "nem"]
+        },
+        "Critical Chance for Slide Attack": {
+            2: ["Pleci", "nent"],
+            3: ["Pleci", "-pleci", "nent"]
+        },
+        "Critical Chance": {
+            2: ["Crita", "cron"],
+            3: ["Crita", "-crita", "cron"]
+        },
+        "Critical Damage": {
+            2: ["Acri", "tis"],
+            3: ["Acri", "-acri", "tis"]
+        },
+        "Melee Damage": {
+            2: ["Visi", "ata"],
+            3: ["Visi", "-visi", "ata"]
+        },
+        "Electricity": {
+            2: ["Vexi", "tio"],
+            3: ["Vexi", "-vexi", "tio"]
+        },
+        "Heat": {
+            2: ["Igni", "pha"],
+            3: ["Igni", "-igni", "pha"]
+        },
+        "Finisher Damage": {
+            2: ["Exi", "cta"],
+            3: ["Exi", "-exi", "cta"]
+        },
+        "Damage": {
+            2: ["Visi", "ata"],
+            3: ["Visi", "-visi", "ata"]
+        },
+        "Fire Rate": {
+            2: ["Croni", "dra"],
+            3: ["Croni", "-croni", "dra"]
+        },
+        "Attack Speed": {
+            2: ["Chroni", "dra"],
+            3: ["Chroni", "-croni", "dra"]
+        },
+        "Projectile Speed": {
+            2: ["Conci", "nak"],
+            3: ["Conci", "-conci", "nak"]
+        },
+        "Initial Combo": {
+            2: ["Para", "um"],
+            3: ["Para", "-para", "um"]
+        },
+        "Impact": {
+            2: ["Magna", "ton"],
+            3: ["Magna", "-magna", "ton"]
+        },
+        "Magazine Capacity": {
+            2: ["Arma", "tin"],
+            3: ["Arma", "-arma", "tin"]
+        },
+        "Heavy Attack Efficiency": {
+            2: ["Forti", "us"],
+            3: ["Forti", "-forti", "us"]
+        },
+        "Multishot": {
+            2: ["Sati", "can"],
+            3: ["Sati", "-sati", "can"]
+        },
+        "Toxin": {
+            2: ["Toxi", "tox"],
+            3: ["Toxi", "-toxi", "tox"]
+        },
+        "Punch Through": {
+            2: ["Lexi", "nok"],
+            3: ["Lexi", "-lexi", "nok"]
+        },
+        "Puncture": {
+            2: ["Insi", "cak"],
+            3: ["Insi", "-insi", "cak"]
+        },
+        "Reload Speed": {
+            2: ["Feva", "tak"],
+            3: ["Feva", "-feva", "tak"]
+        },
+        "Range": {
+            2: ["Locti", "tor"],
+            3: ["Locti", "-locti", "tor"]
+        },
+        "Slash": {
+            2: ["Sci", "sus"],
+            3: ["Sci", "-sci", "sus"]
+        },
+        "Status Chance": {
+            2: ["Hexa", "dex"],
+            3: ["Hexa", "-hexa", "dex"]
+        },
+        "Status Duration": {
+            2: ["Deci", "des"],
+            3: ["Deci", "-deci", "des"]
+        },
+        "Weapon Recoil": {
+            2: ["Zeti", "mag"],
+            3: ["Zeti", "-zeti", "mag"]
+        },
+        "Zoom": {
+            2: ["Hera", "lis"],
+            3: ["Hera", "-hera", "lis"]
+        },
+    }
+
+    if stat_name in mapping:
+        if buff_count in mapping[stat_name]:
+            if 1 <= position <= len(mapping[stat_name][buff_count]):
+                return mapping[stat_name][buff_count][position - 1]
+
+    return ""
+
+def get_buff_naming(riven_stat_details) -> str:
+    
+    buff_naming = ""
+    first = second = third = 0
+    
+    # Filter out only buffs (exclude the curse)
+    buffs = []
+    for i in range(riven_stat_details.StatCount):
+        # Skip the curse (last stat if it's a curse)
+        if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
+            continue
+        if riven_stat_details.StatName[i] != "":  # Only include valid stats
+            buffs.append((riven_stat_details.Normalize[i], riven_stat_details.StatName[i]))
+
+    # Sort by Normalize (highest first)
+    buffs.sort(key=lambda x: x[0], reverse=True)
+
+    for pos, (_, stat_name) in enumerate(buffs, start=1):
+        buff_naming += get_buff_name(stat_name, pos, riven_stat_details.BuffCount)
+
+    return buff_naming
 
 async def get_weapon_data(file_path: str, weapon_data_url: str):
     # Check if the file exists
@@ -841,6 +1021,96 @@ def get_value_and_stat_name(extracted_text, riven_stat_details):
 
     # Final logging
     # print(riven_stat_details.StatName)
+
+def fix_stat_name(extracted_text: str) -> str:
+    # Dictionary of shortforms/aliases → full stat name
+    replacements = {
+        # Critical
+        "cc": "Critical Chance",
+        "crit chance": "Critical Chance",
+        "critical": "Critical Chance",
+        "cd": "Critical Damage",
+        "crit dmg": "Critical Damage",
+        "critical damage": "Critical Damage",
+        "slide": "Critical Chance for Slide Attack",
+
+        # Multishot
+        "ms": "Multishot",
+        "multi": "Multishot",
+
+        # Status
+        "sc": "Status Chance",
+        "status": "Status Chance",
+        "sd": "Status Duration",
+        "status dur": "Status Duration",
+
+        # Damage types
+        "dmg": "Damage",
+        "damage": "Damage",
+        "md": "Melee Damage",
+        "melee": "Melee Damage",
+        "finisher": "Finisher Damage",
+        "slash": "Slash",
+        "impact": "Impact",
+        "puncture": "Puncture",
+        "toxin": "Toxin",
+        "elec": "Electricity",
+        "electric": "Electricity",
+        "cold": "Cold",
+        "heat": "Heat",
+        "fire": "Heat",
+
+        # Faction damage
+        "dtc": "Damage to Corpus",
+        "corpus": "Damage to Corpus",
+        "dtg": "Damage to Grineer",
+        "grineer": "Damage to Grineer",
+        "dti": "Damage to Infested",
+        "infested": "Damage to Infested",
+
+        # Ammo & magazine
+        "ammo": "Ammo Maximum",
+        "ammo max": "Ammo Maximum",
+        "mag": "Magazine Capacity",
+        "mag cap": "Magazine Capacity",
+
+        # Fire rate / attack speed
+        "fr": "Fire Rate",
+        "firerate": "Fire Rate",
+        "as": "Attack Speed",
+        "atk spd": "Attack Speed",
+
+        # Range & punch
+        "range": "Range",
+        "pt": "Punch Through",
+        "punch": "Punch Through",
+
+        # Reload
+        "rs": "Reload Speed",
+        "reload": "Reload Speed",
+
+        # Other stats
+        "zoom": "Zoom",
+        "recoil": "Weapon Recoil",
+        "combo": "Combo Duration",
+        "initial combo": "Initial Combo",
+        "acc": "Additional Combo Count Chance",
+        "proj": "Projectile Speed",
+        "hae": "Heavy Attack Efficiency",
+    }
+
+    # Split text into tokens (numbers + words can be glued, e.g. "18.6cc")
+    tokens = re.findall(r"\d+\.\d+|\d+|[A-Za-z]+", extracted_text)
+
+    fixed_words = []
+    for token in tokens:
+        key = token.lower()
+        if key in replacements:
+            fixed_words.append(replacements[key])
+        else:
+            fixed_words.append(token)
+
+    return " ".join(fixed_words)
 
 def get_stat_name(input_string):
     if "additional" in input_string:
@@ -1260,9 +1530,11 @@ def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
         if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
             riven_stat_details.Grade[i] = get_grade_new(-normalize)
             print(f"Grade Value Curse : {-normalize}")
+            riven_stat_details.Normalize[i] = -normalize
         else:
             riven_stat_details.Grade[i] = get_grade_new(normalize)
             print(f"Grade Value Buff {i+1} : {normalize}")
+            riven_stat_details.Normalize[i] = normalize
 
 # Define a function that returns a color based on the grade
 def get_grade_color(grade):
@@ -1283,7 +1555,9 @@ def get_grade_color(grade):
     
     return grade_colors.get(grade, "White")
 
-async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_file, platinum, weapon_variant):
+async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, image_file, platinum, weapon_variant, ocr_engine):
+    
+    wp = weapon_name
     # Set file paths
     global background_path
     global font_path
@@ -1311,8 +1585,12 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
     riven_image.thumbnail((box_width, box_height))
     riven_image_x = 33 + (box_width - riven_image.width) // 2
     riven_image_y = (box_height - riven_image.height) // 2
-    background.paste(riven_image, (riven_image_x, riven_image_y))
-
+    
+    if ocr_engine != "Manual":
+        background.paste(riven_image, (riven_image_x, riven_image_y)) # not transparent
+    else:
+        background.paste(riven_image, (riven_image_x, riven_image_y), riven_image) # transparent
+        
     # Draw on the background
     draw = ImageDraw.Draw(background)
 
@@ -1465,6 +1743,138 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         if "999.9" not in max_text:
             draw.text((x_position, y_position), max_text, fill="white", font=default_font)
     
+    # Recreate riven mod - For manual grading only
+    if ocr_engine == "Manual":
+        weapon_name_font_size = 13
+        stat_font_size = 11
+        dpi = 96
+        scaling_factor = dpi / 72
+        adjusted_weapon_name_font_size = int(weapon_name_font_size * scaling_factor)
+        adjusted_stat_font_size = int(stat_font_size * scaling_factor)
+        
+        # Create text elements for manual grading recreation
+        weapon_name_font = ImageFont.truetype("segoeuib.ttf", adjusted_weapon_name_font_size)
+        stat_font = ImageFont.truetype("seguisb.ttf", adjusted_stat_font_size)
+        
+        buff_naming = get_buff_naming(riven_stat_details)
+        wp = get_base_weapon_name(wp)
+        weapon_name_buff_naming = f"{wp} {buff_naming}"
+        
+        combine_stat_1 = str(riven_stat_details.Prefix[0]) + str(riven_stat_details.Value[0]) + str(riven_stat_details.Unit[0] + " " + str(riven_stat_details.StatName[0]))
+        combine_stat_2 = str(riven_stat_details.Prefix[1]) + str(riven_stat_details.Value[1]) + str(riven_stat_details.Unit[1] + " " + str(riven_stat_details.StatName[1]))
+        combine_stat_3 = str(riven_stat_details.Prefix[2]) + str(riven_stat_details.Value[2]) + str(riven_stat_details.Unit[2] + " " + str(riven_stat_details.StatName[2]))
+        combine_stat_4 = str(riven_stat_details.Prefix[3]) + str(riven_stat_details.Value[3]) + str(riven_stat_details.Unit[3] + " " + str(riven_stat_details.StatName[3]))
+        stat_details = f"{combine_stat_1}\n{combine_stat_2}\n{combine_stat_3}\n{combine_stat_4}"
+        stat_details = stat_details.replace("999.9", "")
+        
+        # Define text area rectangle (coordinates for where text should be placed on the Riven image)
+        text_area_rect = (59, 160, 247, 276)
+        left, top, right, bottom = text_area_rect
+        rect_width = right - left
+        rect_height = bottom - top
+        # draw.rectangle(text_area_rect, outline="red", width=1)
+        
+        # Function to wrap text to fit within specified width
+        def wrap_text(text, font, max_width):
+            """Wrap text to fit within max_width"""
+            lines = []
+    
+            # If the text contains newlines, process each line separately
+            paragraphs = text.split('\n')
+    
+            for paragraph in paragraphs:
+                words = paragraph.split()
+                current_line = []
+        
+                for word in words:
+                    # Test if adding this word would exceed the width
+                    test_line = ' '.join(current_line + [word])
+                    bbox = font.getbbox(test_line)
+                    test_width = bbox[2] - bbox[0]
+            
+                    if test_width <= max_width:
+                        current_line.append(word)
+                    else:
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                        current_line = [word]
+        
+                if current_line:
+                    lines.append(' '.join(current_line))
+    
+            return lines
+
+        # Function to create text image with proper wrapping
+        def create_text_image(text_block, fonts, max_width, text_color, bg_color=(0, 0, 0, 0)):
+            """Create an image with text that fits within max_width"""
+            # Calculate total dimensions needed
+            total_height = 0
+            line_heights = []
+            all_lines = []
+    
+            for i, text in enumerate(text_block):
+                font = fonts[i]
+                wrapped_lines = wrap_text(text, font, max_width)
+                all_lines.append((wrapped_lines, font))
+        
+                # Calculate line height for this font
+                bbox = font.getbbox("Ay")
+                line_height = bbox[3] - bbox[1]
+                line_heights.append(line_height)
+        
+                # Add height for this text element
+                total_height += len(wrapped_lines) * line_height * 1.2
+        
+                # Add spacing between text elements (except after the last one)
+                if i < len(text_block) - 1:
+                    total_height += line_height * 0.1
+    
+            # Create transparent image for text
+            extra_padding = 5  # Add 10 extra pixels at the bottom
+            text_image = Image.new('RGBA', (max_width, int(total_height) + extra_padding), bg_color)
+            text_draw = ImageDraw.Draw(text_image)
+    
+            # Draw text on the temporary image
+            y_position = 0
+            for i, (wrapped_lines, font) in enumerate(all_lines):
+                line_height = line_heights[i]
+        
+                for line in wrapped_lines:
+                    bbox = font.getbbox(line)
+                    line_width = bbox[2] - bbox[0]
+                    x_position = (max_width - line_width) / 2
+                    text_draw.text((x_position, y_position), line, fill=text_color, font=font)
+                    y_position += line_height * 1.2
+        
+                # Add spacing between text elements
+                if i < len(all_lines) - 1:
+                    y_position += line_height * 0.1
+    
+            return text_image
+
+        # Create text block with title and description
+        text_block = [weapon_name_buff_naming, stat_details]
+        fonts = [weapon_name_font, stat_font]
+
+        # Create text image in memory
+        text_image = create_text_image(text_block, fonts, rect_width, "#9d6ae9") #9d6ae9 826aa6
+        # text_image.save("debug_text_image.png", "PNG")
+
+        # Resize text image if it's taller than the rectangle
+        if text_image.height > rect_height:
+            # Calculate scaling factor to fit height
+            scale_factor = rect_height / text_image.height
+            new_width = int(text_image.width * scale_factor)
+            new_height = rect_height
+            text_image = text_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Calculate position to center the text image within the rectangle
+        x_center = left + (rect_width - text_image.width) / 2
+        y_center = top + (rect_height - text_image.height) / 2
+        
+        # Paste the text image onto the main background, centered in the rectangle
+        background.paste(text_image, (int(x_center), int(y_center)), text_image)
+
     # Draw bar chart
     global bar_buff
     global bar_curse
@@ -1553,9 +1963,12 @@ def check_out_range(riven_stat_details):
 async def process_grading(task: GradingTask, is_edit: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
         try:  
-            # Convert image to JPEG
-            output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
-            await convert_image_to_jpg(task.image, output_riven)
+            # Skip image processing for manual grading
+            if task.ocr_engine != "Manual":
+                output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
+                await convert_image_to_jpg(task.image, output_riven)
+            else:
+                output_riven = task.image
     
             # Get all weapon data (download and save txt file)
             global weapon_data_url
@@ -1585,8 +1998,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 return
             # return
     
-            # Check if the image is Riven Mod
-            if is_riven(extracted_text) == False:
+            # Check if the text represents a Riven Mod (skip for manual)
+            if task.ocr_engine != "Manual" and is_riven(extracted_text) == False:
                 await task.interaction.followup.send("Please upload an image containing only one visible Riven Mod. Do not include any extra text, only the Riven Mod itself.", file=discord.File(output_riven))  # Use followup
                 print(f"is_riven extracted_text : {extracted_text}")
                 return
@@ -1632,9 +2045,14 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             weapon_name, weapon_name_found, task.weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type)
             print(f"weapon_name : {weapon_name}")
             if weapon_name_found == False:
-                await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
-                os.remove(output_riven)
-                return
+                if task.ocr_engine != "Manual":
+                    await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
+                    # os.remove(output_riven)
+                    return
+                else:
+                    await task.interaction.followup.send(f"Weapon name not found! Please make sure to select the weapon name from the autocomplete suggestions.\n{extracted_text}")  # Use followup
+                    # os.remove(output_riven)
+                    return
             
             # For Kitguns, set weapon type based on selected variant
             if is_kitgun(weapon_name):
@@ -1727,8 +2145,11 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
     
             # Count buff stat
             extracted_text = extracted_text.lower()
-            buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
-            riven_stat_details.BuffCount = buff_count
+            if task.ocr_engine != "Manual":
+                buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
+                riven_stat_details.BuffCount = buff_count
+            else:
+                riven_stat_details.BuffCount = task.buff_count
             # return
             # Get weapon disposition and update weapon name with variant
             weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, task.weapon_variant, task.weapon_type)
@@ -1783,7 +2204,11 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 for i in range(riven_stat_details.StatCount):
                     riven_stat_details.Min[i] /= 9
                     riven_stat_details.Max[i] /= 9
-                    
+            
+            if task.ocr_engine == "Manual":
+                if task.riven_rank == "Unranked":
+                    output_riven = "empty_riven_unranked.png"
+            
             # Get Prefix and Unit
             get_prefix_and_unit(riven_stat_details)
     
@@ -1852,7 +2277,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 weapon_dispo, 
                 output_riven,  # Pass the file path directly
                 task.platinum,
-                task.weapon_variant
+                task.weapon_variant,
+                task.ocr_engine
             )
             # Return the path if this is an edit operation
             if is_edit:
@@ -1873,6 +2299,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     original_message=message,
                     original_image_path=output_riven,
                     weapon_name=weapon_name,
+                    buff_count=task.buff_count,
+                    ocr_engine=task.ocr_engine,
                     platinum=task.platinum
                 )
                 view.current_variant = task.weapon_variant
@@ -1892,6 +2320,10 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
             except:
                 print("Failed to send error")
+            
+            # Return None when there's an error in edit mode
+            if is_edit:
+                return None, None
         
 @tree.command(name="crop", description="Auto crop Riven mod.")
 async def crop_riven(interaction: discord.Interaction, image: discord.Attachment):
@@ -2066,7 +2498,8 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
                     riven_rank=riven_rank,
                     image=temp_filename,  # Pass file path directly
                     platinum=platinum,
-                    ocr_engine="OCR Space"
+                    ocr_engine="OCR Space",
+                    buff_count=0
                 )
                 
                 await process_grading(task)
@@ -2085,6 +2518,82 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
         except Exception as send_error:
             print(f"Failed to send error: {send_error}")
 
+@tree.command(name="m_grading", description="Manual grading for a Riven mod.")
+@app_commands.choices(
+    riven_rank=[
+        app_commands.Choice(name="Maxed", value="Maxed"),
+        app_commands.Choice(name="Unranked", value="Unranked"),
+    ]
+)
+async def m_grading(
+    interaction: discord.Interaction, 
+    weapon_name: str,
+    buff_1: str,
+    buff_2: str,
+    buff_3: str = None,
+    curse: str = None,
+    riven_rank: str = "Auto",
+    platinum: str = None
+):
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        # Manually construct the extracted text from the inputs
+        extracted_text = f"{weapon_name}"
+        
+        # Add buffs
+        extracted_text += f" {buff_1} {buff_2}"
+        buff_count = 2
+        if buff_3:
+            extracted_text += f" {buff_3}"
+            buff_count = 3
+        if curse:
+            extracted_text += f" {curse}"
+        
+        # Shortform/Alias to full stat name
+        extracted_text = fix_stat_name(extracted_text)
+        
+        # Set default values
+        weapon_variant = "Normal"
+        weapon_type = "Auto"
+        
+        # Create a task with the mock image path
+        task = GradingTask(
+            interaction=interaction,
+            weapon_variant=weapon_variant,
+            weapon_type=weapon_type,
+            riven_rank=riven_rank,
+            image="empty_riven_maxed.png",
+            platinum=platinum,
+            ocr_engine="Manual",
+            buff_count = buff_count
+        )
+        
+        # Store the manually created text
+        task.raw_extracted_text = extracted_text
+        
+        # Process the grading
+        await process_grading(task)
+        
+    except Exception as e:
+        print(f"Error in manual grading command: {e}")
+        traceback.print_exc()
+        try:
+            await interaction.followup.send("❌ Failed to process your manual Riven input. Please try again.")
+        except Exception as send_error:
+            print(f"Failed to send error: {send_error}")
+
+# all_weapon_data = load_weapon_data(file_path)
+# all_weapon_name = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"]]
+
+@m_grading.autocomplete("weapon_name")
+async def weapon_autocomplete(interaction, current: str):
+    results = [
+        app_commands.Choice(name=w, value=w)
+        for w in all_weapon_name if current.lower() in w.lower()
+    ]
+    return results[:25]  # show up to 25 filtered matches
+
 @client.event
 async def on_ready():
     # Define the path to the bot's script location
@@ -2099,7 +2608,22 @@ async def on_ready():
             except Exception as e:
                 print(f"Failed to delete {filename}: {e}")
                 break
-                
+    
+    # Load weapon data on startup
+    try:
+        await get_weapon_data(file_path, weapon_data_url)
+        print("Weapon data loaded successfully on startup")
+        
+        # Update the weapon name list for autocomplete
+        global all_weapon_name
+        all_weapon_data = load_weapon_data(file_path)
+        all_weapon_name = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"]]
+        print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete")
+        
+    except Exception as e:
+        print(f"Failed to load weapon data on startup: {e}")
+        all_weapon_name = []
+        
     await tree.sync()
     print(f'Logged in as {client.user}')
 # Run the bot
