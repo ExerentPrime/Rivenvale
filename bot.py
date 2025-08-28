@@ -191,6 +191,7 @@ def special_base_names(extract_text: str, weapon_name: str):
         "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
         "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
         "Dex Dakra","Dex Nikana",
+        "Twin Krohkur","Twin Grakatas","Twin Kohmak","Twin Vipers",
         "Dragon Nikana","Mutalist Cernos","Mutalist Quanta","Proboscis Cernos","Dual Skana"
     ]
     
@@ -213,6 +214,8 @@ def get_base_weapon_name(full_name: str) -> str:
     #fix for Pangolin Sword and Prime
     if "Pangolin" in full_name:
         return "Pangolin Sword"
+        
+    # Fix for Twin weapon
         
     """Extracts base weapon name by removing known variant suffixes"""
     variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
@@ -243,6 +246,10 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
         # Fix for Pangolin
         if "Pangolin" in base_weapon_name:
             return ["Pangolin Sword", "Pangolin Prime"]
+            
+        # Fix for Cestra
+        if "Cestra" == base_weapon_name:
+            return ["Cestra"]
         
         data = load_weapon_data(file_path)
         variants = set()
