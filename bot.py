@@ -1030,8 +1030,6 @@ def fix_stat_name(extracted_text: str) -> str:
         "accc": "Additional Combo Count Chance",
         "add": "Additional Combo Count Chance",
         "addcombo": "Additional Combo Count Chance",
-        "extracombo": "Additional Combo Count Chance",
-        "bonuscombo": "Additional Combo Count Chance",
         "combochance": "Additional Combo Count Chance",
 
         # Ammo Maximum
@@ -1051,7 +1049,6 @@ def fix_stat_name(extracted_text: str) -> str:
         # Cold
         "cold": "Cold",
         "ice": "Cold",
-        "freeze": "Cold",
 
         # Critical Chance
         "cc": "Critical Chance",
@@ -1098,12 +1095,14 @@ def fix_stat_name(extracted_text: str) -> str:
 
         # Finisher Damage
         "fd": "Finisher Damage",
+        "fin": "Finisher Damage",
         "finisher": "Finisher Damage",
         "finisherdmg": "Finisher Damage",
         "fdmg": "Finisher Damage",
 
         # Fire Rate
         "fr": "Fire Rate",
+        "rate": "Fire Rate",
         "firerate": "Fire Rate",
 
         # Heat
@@ -1112,6 +1111,7 @@ def fix_stat_name(extracted_text: str) -> str:
 
         # Heavy Attack Efficiency
         "hae": "Heavy Attack Efficiency",
+        "eff": "Heavy Attack Efficiency",
         "heavy": "Heavy Attack Efficiency",
         "heavyatk": "Heavy Attack Efficiency",
         "heavyattack": "Heavy Attack Efficiency",
@@ -1145,6 +1145,7 @@ def fix_stat_name(extracted_text: str) -> str:
 
         # Projectile Speed
         "ps": "Projectile Speed",
+        "pfs": "Projectile Speed",
         "proj": "Projectile Speed",
         "projectile": "Projectile Speed",
         "projspd": "Projectile Speed",
@@ -1166,6 +1167,7 @@ def fix_stat_name(extracted_text: str) -> str:
         "rs": "Reload Speed",
         "reload": "Reload Speed",
         "rld": "Reload Speed",
+        "rls": "Reload Speed",
 
         # Slash
         "slash": "Slash",
@@ -1190,6 +1192,7 @@ def fix_stat_name(extracted_text: str) -> str:
 
         # Weapon Recoil
         "wr": "Weapon Recoil",
+        "rec": "Weapon Recoil",
         "recoil": "Weapon Recoil",
         "rcl": "Weapon Recoil",
 
@@ -2272,7 +2275,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
                 return
-    
+            
             # Stat Name correction
             for i in range(riven_stat_details.StatCount):
                 if "Fire Rate" in riven_stat_details.StatName[i] and task.weapon_type == "Melee":
@@ -2643,16 +2646,32 @@ async def m_grading(
     try:
         # Manually construct the extracted text from the inputs
         # Add buffs
-        extracted_text = f"{buff_1} {buff_2}"
+        temp = fix_stat_name(buff_1)
+        if buff_1.replace(" ","") == temp.replace(" ",""):
+            await interaction.followup.send("❌ You're using the wrong shortform/alias in buff_1 stat. See the full list [here](https://discord.com/channels/1350251436977557534/1350258178998276147/1410213851164840068).")
+            return
+        extracted_text = temp
+        
+        temp = fix_stat_name(buff_2)
+        if buff_2.replace(" ","") == temp.replace(" ",""):
+            await interaction.followup.send("❌ You're using the wrong shortform/alias in buff_2 stat. See the full list [here](https://discord.com/channels/1350251436977557534/1350258178998276147/1410213851164840068).")
+            return
+        extracted_text += f" {temp}"
+        
         buff_count = 2
         if buff_3:
-            extracted_text += f" {buff_3}"
+            temp = fix_stat_name(buff_3)
+            if buff_3.replace(" ","") == temp.replace(" ",""):
+                await interaction.followup.send("❌ You're using the wrong shortform/alias in buff_3 stat. See the full list [here](https://discord.com/channels/1350251436977557534/1350258178998276147/1410213851164840068).")
+                return
+            extracted_text += f" {temp}"
             buff_count = 3
         if curse:
-            extracted_text += f" {curse}"
-        
-        # Shortform/Alias to full stat name
-        extracted_text = fix_stat_name(extracted_text)
+            temp = fix_stat_name(curse)
+            if curse.replace(" ","") == temp.replace(" ",""):
+                await interaction.followup.send("❌ You're using the wrong shortform/alias in curse stat. See the full list [here](https://discord.com/channels/1350251436977557534/1350258178998276147/1410213851164840068).")
+                return
+            extracted_text += f" {temp}"
         
         extracted_text = f"{weapon_name} {extracted_text}"
         
