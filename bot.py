@@ -2642,10 +2642,8 @@ async def m_grading(
     
     try:
         # Manually construct the extracted text from the inputs
-        extracted_text = f"{weapon_name}"
-        
         # Add buffs
-        extracted_text += f" {buff_1} {buff_2}"
+        extracted_text = f"{buff_1} {buff_2}"
         buff_count = 2
         if buff_3:
             extracted_text += f" {buff_3}"
@@ -2655,6 +2653,8 @@ async def m_grading(
         
         # Shortform/Alias to full stat name
         extracted_text = fix_stat_name(extracted_text)
+        
+        extracted_text = f"{weapon_name} {extracted_text}"
         
         # Set default values
         weapon_variant = "Normal"
