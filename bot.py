@@ -41,7 +41,7 @@ bar_curse_path = r"bar_curse.png"
 all_weapon_name = ""
 
 class RegradeView(discord.ui.View):
-    def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, buff_count: int, ocr_engine: str, platinum: str = None):
+    def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, buff_count: int, ocr_engine: str, riven_rank: str, platinum: str = None):
         super().__init__(timeout=180)  # 3 minute timeout
         self.original_message = original_message
         self.original_image_path = original_image_path
@@ -51,6 +51,7 @@ class RegradeView(discord.ui.View):
         self.variant = self.current_variant  # Ensure this attribute exist
         self.buff_count = buff_count
         self.ocr_engine = ocr_engine
+        self.riven_rank = riven_rank
         
         # Get base weapon name (remove variant if present)
         base_name = get_base_weapon_name(weapon_name)
@@ -109,7 +110,7 @@ class RegradeView(discord.ui.View):
             interaction=interaction,
             weapon_variant=self.variant,
             weapon_type="Auto",
-            riven_rank="Auto",  # Auto-detect rank
+            riven_rank=self.riven_rank,
             image=self.original_image_path,
             platinum=self.platinum,
             ocr_engine=self.ocr_engine,
@@ -251,11 +252,12 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
         if "Cestra" == base_weapon_name:
             return ["Cestra"]
         
+        # Fix for Bo
+        if "Bo" == base_weapon_name:
+            return ["Bo", "Bo Prime", "MK1-Bo"]
+        
         data = load_weapon_data(file_path)
         variants = set()
-        
-        # Standard variants to check for
-        # variant_types = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1"]
         
         # Check for base name and all variants
         for weapon in data.get("ExportWeapons", []):
@@ -2362,9 +2364,9 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 title_text = "GRADING FAILED ❌"
                 
                 if task.ocr_engine != "Manual":
-                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515) \n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
                 else:
-                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is outside the min–max range, it may be due to an incorrect input or because the Riven you are referring to is outdated."
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If it still fails, it may be due to an incorrect input or because the Riven you are referring to is outdated."
                     
             elif out_range == False and out_range_faction == True:
                 title_text = "GRADING SUCCESS ✅️"
@@ -2414,6 +2416,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     weapon_name=weapon_name,
                     buff_count=task.buff_count,
                     ocr_engine=task.ocr_engine,
+                    riven_rank=task.riven_rank,
                     platinum=task.platinum
                 )
                 view.current_variant = task.weapon_variant
