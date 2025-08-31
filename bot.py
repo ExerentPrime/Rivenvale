@@ -2746,7 +2746,12 @@ async def on_ready():
         # Update the weapon name list for autocomplete
         global all_weapon_name
         all_weapon_data = load_weapon_data(file_path)
-        all_weapons = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"] if "<ARCHWING>" not in weapon["name"] and not weapon["name"].isupper()]
+        all_weapons = [
+            weapon["name"]
+            for weapon in all_weapon_data["ExportWeapons"]
+            if "<ARCHWING>" not in weapon["name"]
+            and not any(x in weapon["uniqueName"] for x in ["PetPart", "Powersuits", "Vehicles", "Items", "OperatorAmplifiers", "ModularMelee01/Balance", "ModularMelee01/Handle", "ModularMelee02/Handle", "ModularMeleeInfested/Handles"])
+        ]
         # Use your existing function to get base names and remove duplicates
         all_weapon_name = list(set([get_base_weapon_name(name) for name in all_weapons]))
         print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete")
