@@ -1853,8 +1853,8 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
     
     # Recreate riven mod - For manual grading only
     if ocr_engine == "Manual":
-        weapon_name_font_size = 13
-        stat_font_size = 11
+        weapon_name_font_size = 14
+        stat_font_size = 12
         dpi = 96
         scaling_factor = dpi / 72
         adjusted_weapon_name_font_size = int(weapon_name_font_size * scaling_factor)
@@ -1876,7 +1876,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         stat_details = stat_details.replace("999.9", "")
         
         # Define text area rectangle (coordinates for where text should be placed on the Riven image)
-        text_area_rect = (59, 160, 247, 276)
+        text_area_rect = (59, 160, 247, 295)
         left, top, right, bottom = text_area_rect
         rect_width = right - left
         rect_height = bottom - top
