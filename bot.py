@@ -1237,7 +1237,7 @@ def get_stat_name(input_string):
         return "Cold"
     elif "comboduration" in input_string:
         return "Combo Duration"
-    elif "criticalchancefor" in input_string:
+    elif "criticalchancefor" in input_string: # Maybe should "criticalchancefo" instead
         return "Critical Chance for Slide Attack"
     elif "criticalchance" in input_string:
         return "Critical Chance"
@@ -2457,7 +2457,7 @@ async def crop_riven(interaction: discord.Interaction, image: discord.Attachment
         img_array = np.array(pil_img)
 
         # Run detection
-        results = model(img_array, verbose=False)
+        results = model(img_array, verbose=False, iou=0.6)
         crops = []
 
         for r in results:
@@ -2570,7 +2570,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
             img_array = np.array(pil_img)
 
             # Run detection
-            results = model(img_array, verbose=False)
+            results = model(img_array, verbose=False, iou=0.6) # iou=0.6 : Increases overlap requirement so duplicates/partials get merged into the main detection.
             crops = []
 
             for r in results:
