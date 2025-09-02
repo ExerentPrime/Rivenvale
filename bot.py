@@ -129,6 +129,10 @@ class RegradeView(discord.ui.View):
                 "Failed to regrade with the selected variant. Please try again.",
                 ephemeral=True
             )
+            print("\n" + "=" * 34)
+            print("|        REGRADING FAILED        |")
+            print("=" * 34 + "\n")
+
             return
         
         new_image_path, new_embed = result
@@ -148,7 +152,11 @@ class RegradeView(discord.ui.View):
                     embed=new_embed,
                     view=self
                 )
-
+        
+        print("\n" + "=" * 34)
+        print("|       REGRADING COMPLETE       |")
+        print("=" * 34 + "\n")
+        
     async def on_timeout(self):
         # Disable all components when the view times out
         for item in self.children:
@@ -739,7 +747,7 @@ def special_case_fix(extracted_text):
     else:
         return ""
 
-def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
+def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven_rank:str):
     weapon_name = ""
     weapon_name_found = False
     
@@ -800,6 +808,19 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
                 weapon_name = weapon['name']
         
         if weapon_name != "":
+            # Try to identify riven rank if possible
+            # Check if "10" or "18" appears right before the weapon name
+            if riven_rank == "Auto":
+                pattern = rf"(10|18).*{re.escape(temp_name)}"
+                match = re.search(pattern, extracted_text)
+                if match:
+                    number = match.group(1)  # This will be "10" or "18"
+                    if number == "10":
+                        riven_rank = "Unranked"
+                    elif number == "18":
+                        riven_rank = "Maxed"
+                    print("Riven rank is detected from the Riven mod.")
+            
             # Replace the temp_name and text before it in the extracted_text
             if weapon_name == "Lex" and "Lexi" in extracted_text: #bug fix for lex and lexi
                 match = re.search(r'(Lex)(?=Lexi)', extracted_text)
@@ -817,7 +838,7 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
             if is_kitgun(weapon_name):
                 if weapon_type == "Auto":
                     weapon_type = "Pistol"  # Default to Secondary
-                    return weapon_name, weapon_name_found, weapon_type, extracted_text
+                    return weapon_name, weapon_name_found, weapon_type, riven_rank, extracted_text
             
             # Get weapon type
             if weapon_type == "Auto":
@@ -843,9 +864,9 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str):
                 elif temp_type == "SpaceGuns":
                     weapon_type = "Archgun"
             
-            return weapon_name, weapon_name_found, weapon_type, extracted_text
+            return weapon_name, weapon_name_found, weapon_type, riven_rank, extracted_text
     
-    return weapon_name, weapon_name_found, weapon_type, extracted_text  # Return the values if not found
+    return weapon_name, weapon_name_found, weapon_type, riven_rank, extracted_text  # Return the values if not found
 
 def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weapon_type: str):
     weapon_dispo = 0
@@ -2072,6 +2093,16 @@ def check_out_range(riven_stat_details):
 
 async def process_grading(task: GradingTask, is_edit: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
+        
+        if is_edit == False:    
+            print("\n" + "=" * 34)
+            print("|        STARTING GRADING        |")
+            print("=" * 34 + "\n")
+        else:
+            print("\n" + "=" * 34)
+            print("|       STARTING REGRADING       |")
+            print("=" * 34 + "\n")
+
         try:  
             # Skip image processing for manual grading
             if task.ocr_engine != "Manual":
@@ -2151,8 +2182,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # Create an instance of RivenStatDetails
             riven_stat_details = RivenStatDetails()
     
-            # Get weapon name and type on riven mod
-            weapon_name, weapon_name_found, task.weapon_type, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type)
+            # Get weapon name and type on riven mod. Also riven rank if possible
+            weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank)
             print(f"weapon_name : {weapon_name}")
             if weapon_name_found == False:
                 if task.ocr_engine != "Manual":
@@ -2309,11 +2340,14 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # Get rank rand Divide Min Max by 9 if riven_rank is Unranked
             if task.riven_rank == "Auto":
                 task.riven_rank = get_riven_rank(riven_stat_details)
+                print("Riven rank has been predicted based on the stat values.")
                 
             if task.riven_rank == "Unranked":
                 for i in range(riven_stat_details.StatCount):
                     riven_stat_details.Min[i] /= 9
                     riven_stat_details.Max[i] /= 9
+                    
+            print(f"riven rank : {task.riven_rank}")
             
             if task.ocr_engine == "Manual":
                 if task.riven_rank == "Unranked":
@@ -2429,8 +2463,15 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             
                 await message.edit(view=view)
             
+            print("\n" + "=" * 34)
+            print("|         GRADING COMPLETE       |")
+            print("=" * 34 + "\n")
+
         except Exception as e:
-            print(f"Grading error: {e}")
+            print("\n" + "=" * 34)
+            print("|         GRADING ERROR          |")
+            print("=" * 34 + "\n")
+            print(e)
             traceback.print_exc()
             try:
                 await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
@@ -2744,7 +2785,7 @@ async def on_ready():
     # Load weapon data on startup
     try:
         await get_weapon_data(file_path, weapon_data_url)
-        print("Weapon data loaded successfully on startup")
+        print("Weapon data loaded successfully on startup.")
         
         # Update the weapon name list for autocomplete
         global all_weapon_name
@@ -2757,7 +2798,7 @@ async def on_ready():
         ]
         # Use your existing function to get base names and remove duplicates
         all_weapon_name = list(set([get_base_weapon_name(name) for name in all_weapons]))
-        print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete")
+        print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete.")
         
     except Exception as e:
         print(f"Failed to load weapon data on startup: {e}")
