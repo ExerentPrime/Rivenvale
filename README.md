@@ -53,10 +53,26 @@ pip install aiohttp discord.py Pillow requests pandas python-dotenv ultralytics 
 ```
 
 ## 🚀 Running the Bot
-1. Install dependencies as above.
-2. Set up your `.env` file.
-3. Ensure required asset files in the project directory.
-4. Run the bot:
+1. Clone the repository as described above.
+2. Install dependencies using the commands provided.
+3. Set up your `.env` file with the Discord bot token and OCR API key.
+4. Ensure required asset files in the project directory.
+5. Run the bot:
 ```
 python bot.py
+```
+## 🔄 Updating and Maintenance
+
+To keep Rivenvale running smoothly and up to date, follow these steps for updates and maintenance:
+
+### Updating the Bot
+1. **Pull Latest Code Changes**  
+Ensure you have the latest version of the repository:
+```
+git pull origin main
+```
+2. **Refresh Data Files**  
+The bot downloads `roll_data.xlsx` and `weapon_data.txt` automatically on first run, but these may become outdated. To force a refresh, delete the existing files and restart the bot:
+```
+rm roll_data.xlsx weapon_data.txt
 ```
