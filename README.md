@@ -13,7 +13,7 @@ After navigate to the Project Directory, run the following command in your termi
 git clone https://github.com/ExerentPrime/Rivenvale.git
 ```
 3. **Verify Cloned Files**  
-Check that the repository contents, including `bot.py` and other necessary files, are present:
+Check that the repository contents, including `bot.py` and other asset files, are present:
 ```
 ls
 ```
