@@ -55,7 +55,7 @@ pip install aiohttp discord.py Pillow requests pandas python-dotenv ultralytics 
 ## 🚀 Running the Bot
 1. Install dependencies as above.
 2. Set up your `.env` file.
-3. Place required asset files in the project directory.
+3. Ensure required asset files in the project directory.
 4. Run the bot:
 ```
 python bot.py
