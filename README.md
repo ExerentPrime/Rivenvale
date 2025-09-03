@@ -33,7 +33,7 @@ You’ll need a `.env` file to store your **Discord bot token** and **OCR API ke
 3. **Create the .env File**
 - Inside your project root, create a file named `.env` and paste Discord bot token and OCR API key. The file should look like this:
 ```
-DISCORD_BOT_TOKEN=MTAxMjM0NTY3ODkwMTIzNDU2Nz.gABcDe.IJKLmNoPQR_stUVwxyz12345AbCdEfGhIjKl
+DISCORD_BOT_TOKEN=AAAa99A99AA9A9Aaa99AAA9A999Aa.aAAaaA.AAAAaAaAAA_aaaaa99999AaAaAaAAaa
 OCR_API=K99999999999999
 ```
 ## 📋 Requirements
