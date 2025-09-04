@@ -31,15 +31,15 @@ ls
 You’ll need a `.env` file to store your **Discord bot token** and **OCR API key**.
 
 1. **Get a Discord Bot Token**
-- Create a Discord application and bot via the [Discord Developer Portal](https://discord.com/developers/applications).  
-- Copy your bot token. 
+   - Create a Discord application and bot via the [Discord Developer Portal](https://discord.com/developers/applications).  
+   - Copy your bot token. 
 
 2. **Get an OCR API Key**
-- Go to [OCR.Space](https://ocr.space/ocrapi/freekey).  
-- Register for a **free key** or purchase a **PRO plan** if you need higher limits.
+   - Go to [OCR.Space](https://ocr.space/ocrapi/freekey).  
+   - Register for a **free key** or purchase a **PRO plan** if you need higher limits.
 
 3. **Create the .env File**
-- Inside your project root, create a file named `.env` and paste Discord bot token and OCR API key. The file should look like this:
+   - Inside your project root, create a file named `.env` and paste Discord bot token and OCR API key. The file should look like this:
 ```
 DISCORD_BOT_TOKEN=AAAa99A99AA9A9Aaa99AAA9A999Aa.aAAaaA.AAAAaAaAAA_aaaaa99999AaAaAaAAaa
 OCR_API=K99999999999999
