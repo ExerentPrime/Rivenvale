@@ -3,7 +3,7 @@
 
 - You may clone the Rivenvale repository and deploy it on your device for personal use only.
 - Commercial use is strictly prohibited.
-- You are permitted to modify the code for personal purposes, but you must not alter the Rivenvale logo or name. The logo is located in the repository file `Rivenvale logo.png`.
+- You are permitted to modify the code for personal purposes, but you must not alter the Rivenvale logo or name. The logo is located in the repository file `Rivenvale_logo.png`.
 - If you are building your own bot using Rivenvale’s code as a reference, you may not use Rivenvale’s assets, such as `bg.png`, `best.pt`, or other associated files. In such cases, you must create or train your own data and assets for your bot.
 
 ## 📥 Cloning the Repository
