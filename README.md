@@ -32,7 +32,7 @@ You’ll need a `.env` file to store your **Discord bot token** and **OCR API ke
 
 1. **Get a Discord Bot Token**
 - Create a Discord application and bot via the [Discord Developer Portal](https://discord.com/developers/applications).  
-- Copy your bot token. (You can also Google for tutorials or ask an AI assistant like ChatGPT/Copilot for guidance.)
+- Copy your bot token. 
 
 2. **Get an OCR API Key**
 - Go to [OCR.Space](https://ocr.space/ocrapi/freekey).  
@@ -71,16 +71,17 @@ python bot.py
 ```
 ## 🔄 Updating and Maintenance
 
-To keep Rivenvale running smoothly and up to date, follow these steps for updates and maintenance:
+Rivenvale is updated regularly to align with new Warframe patches. To ensure the bot functions correctly, you must update the code and refresh specific data files as outlined below:
 
 ### Updating the Bot
-1. **Pull Latest Code Changes**  
+- **Pull Latest Code Changes**  
 Ensure you have the latest version of the repository:
 ```
 git pull origin main
 ```
-2. **Refresh Data Files**  
-The bot downloads `roll_data.xlsx` and `weapon_data.txt` automatically on first run, but these may become outdated. To force a refresh, delete the existing files and restart the bot:
+### Maintaining the Data
+- **Refresh Data Files**  
+Rivenvale automatically downloads `roll_data.xlsx` and `weapon_data.txt` on its first run. However, these files may become outdated after a Warframe patch. To force a refresh, delete the existing files and restart the bot:
 ```
 rm roll_data.xlsx weapon_data.txt
 ```
