@@ -16,7 +16,7 @@ To get started, clone the repository from GitHub to your local device using the 
 git --version
 ```
 2. **Clone the Repository**  
-After navigate to the Project Directory, run the following command in your terminal or command prompt to clone the Rivenvale repository:
+After navigate to the project directory, run the following command in your terminal or command prompt to clone the Rivenvale repository:
 ```
 git clone https://github.com/ExerentPrime/Rivenvale.git
 ```
