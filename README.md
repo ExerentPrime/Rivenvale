@@ -1,6 +1,7 @@
 # Join the Rivenvale Workshop Discord Server
 
-Join Discord to stay updated with the latest news or discuss any issues. Join now:
+Join Discord to stay updated with the latest news or discuss any issues.
+## 🌟 Invite Link
 ```
 discord.gg/Jgc3WnEQhq
 ```
