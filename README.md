@@ -1,10 +1,10 @@
 # Rivenvale Workshop Discord Server
-
-Join Discord to stay updated with the latest news or discuss any issues.
+Join now to grade your Rivens. All instructions, including how to use the bot, are explained in the Discord channels.
 ## 🌟 Invite Link
 ```
 discord.gg/Jgc3WnEQhq
 ```
+Please note: In the future, I may no longer host the Rivenvale bot on Discord. If you enjoy Rivenvale’s grading system, I’ve provided instructions below on how to host it yourself. Make sure to carefully read and understand the **Usage Restrictions** before doing so.
 
 # Deploy Rivenvale on Your Device
 ## 🔒 Usage Restriction
