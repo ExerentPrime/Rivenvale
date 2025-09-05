@@ -1,5 +1,5 @@
 # Rivenvale Workshop Discord Server
-Join now to grade your Rivens. All first steps are shared in the discord channels, including the bot usage.
+Join now to grade your Rivens. All instructions, including how to use the bot, are explained in the Discord channels.
 ## 🌟 Invite Link
 ```
 discord.gg/Jgc3WnEQhq
