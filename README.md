@@ -1,17 +1,17 @@
 # Rivenvale Workshop Discord Server
-Join now to grade your Rivens. All instructions, including how to use the bot, are explained in the Discord channels.
+Join now to grade your Rivens. All first steps are shared in the discord channels, including the bot usage.
 ## 🌟 Invite Link
 ```
 discord.gg/Jgc3WnEQhq
 ```
-Please note: In the future, I may no longer host the Rivenvale bot on Discord. If you enjoy Rivenvale’s grading system, I’ve provided instructions below on how to host it yourself. Make sure to carefully read and understand the **Usage Restrictions** before doing so.
+Notice: I may stop hosting the Rivenvale bot to Discord in the future. If you like Rivenvale’s grading system, I’ve provided instructions below on how to host it yourself. Before you do that, though, please be sure to read and understand the **Usage Restrictions**.
 
 # Deploy Rivenvale on Your Device
 ## 🔒 Usage Restriction
 
 - You may clone the Rivenvale repository and deploy it on your device for personal use only.
 - Commercial use is strictly prohibited.
-- You are permitted to modify the code for personal purposes, but you must not alter the Rivenvale logo and name. The logo is located in the repository file `Rivenvale_logo.png`.
+- You are permitted to modify the code for personal purposes, but you must not alter the Rivenvale logo and name when setting up the bot. The logo is located in the repository file `Rivenvale_logo.png`.
 - If you are developing your own bot using Rivenvale’s code as a reference, you are free to create your own unique logo and name to establish your bot’s distinct identity. However, you may not use Rivenvale’s proprietary assets, including but not limited to `bg.png`, `best.pt`, or any other associated files provided in the Rivenvale repository.
 
 ## 📥 Cloning the Repository
