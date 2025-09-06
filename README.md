@@ -66,13 +66,13 @@ OCR_API=K99999999999999
 
 ### System Requirements
 - **Python**: 3.8 or higher (tested on 3.12.3). Download from [python.org](https://www.python.org/downloads/).
-- **OS**: Windows, macOS, or Linux (must support image processing libraries like OpenCV).
+- **OS**: Windows, macOS, or Linux.
 
 ### Python Dependencies
 Install required packages with:
 
 ```
-pip install aiohttp discord.py Pillow requests pandas python-dotenv ultralytics opencv-python numpy
+pip install aiohttp discord.py pillow requests pandas ultralytics numpy python-dotenv
 ```
 
 ## 🚀 Running the Bot
