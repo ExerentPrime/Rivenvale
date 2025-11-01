@@ -30,7 +30,7 @@ tree = app_commands.CommandTree(client)
 model = YOLO(r"best.pt")
 sheet_url = "https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8/export?format=xlsx"
 sheet_path = r"roll_data.xlsx"
-weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_l2N8dIqk1NR8ggVq4PgWtA"
+weapon_data_url = "https://content.warframe.com/PublicExport/Manifest/ExportWeapons_en.json!00_9O7HTKo9HXPi1aGVO+y04A"
 file_path = r"weapon_data.txt"
 background_path = r"bg.png"
 font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
@@ -2808,4 +2808,5 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
+
 
