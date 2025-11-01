@@ -1062,6 +1062,13 @@ def fix_stat_name(extracted_text: str) -> str:
         "addcombo": "Additional Combo Count Chance",
         "combochance": "Additional Combo Count Chance",
 
+        # Chance to Gain Combo Count
+        "gain": "Chance to Gain Combo Count",
+        "gcc": "Chance to Gain Combo Count",
+        "ctgcc": "Chance to Gain Combo Count",
+        "cgcc": "Chance to Gain Combo Count",
+        "gaincombo": "Chance to Gain Combo Count",
+
         # Ammo Maximum
         "am": "Ammo Maximum",
         "ammo": "Ammo Maximum",
@@ -1246,6 +1253,8 @@ def fix_stat_name(extracted_text: str) -> str:
 def get_stat_name(input_string):
     if "additional" in input_string:
         return "Additional Combo Count Chance"
+    elif "gain" in input_string:
+        return "Chance to Gain Combo Count"
     elif "ammo" in input_string:
         return "Ammo Maximum"
     elif "corpus" in input_string:
@@ -2808,5 +2817,6 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
+
 
 
