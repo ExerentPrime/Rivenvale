@@ -195,7 +195,7 @@ class GradingTask:
 
 def special_base_names(extract_text: str, weapon_name: str):
     all_special_base_names = [
-        "Dakra Prime","Reaper Prime","Gotva Prime","Euphona Prime","Vadarya Prime",
+        "Dakra Prime","Reaper Prime","Gotva Prime","Euphona Prime","Vadarya Prime","Galariak Prime","Sagek Prime",
         "Tenet Agendus","Tenet Exec","Tenet Grigori","Tenet Livia","Tenet Envoy","Tenet Diplos","Tenet Spirex",
         "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
         "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
@@ -2817,6 +2817,7 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
+
 
 
 
