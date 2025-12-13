@@ -13,6 +13,8 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 import traceback
+from google import genai
+from google.genai import types
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,6 +41,12 @@ font_path = r"segoeuib.ttf"  # Segoe UI Bold font path
 bar_buff_path = r"bar_buff.png"
 bar_curse_path = r"bar_curse.png"
 all_weapon_name = ""
+
+try:
+    gemini_client = genai.Client()
+except Exception:
+    print("FATAL ERROR: Please set the GEMINI_API_KEY environment variable.")
+    gemini_client = None
 
 class RegradeView(discord.ui.View):
     def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, buff_count: int, ocr_engine: str, riven_rank: str, platinum: str = None):
@@ -366,12 +374,100 @@ async def convert_image_to_jpg(image_path, output_riven):
         print(f"Error converting image: {e}")
         raise
 
+async def gemini_api(filename):
+    if not gemini_client:
+        return "ERROR: AI client not initialized."
+        
+    all_stat_name = [
+        "Additional Combo Count Chance", "Chance to Gain Combo Count", "Ammo Maximum",
+        "Damage to Corpus", "Damage to Grineer", "Damage to Infested",
+        "Cold", "Electricity", "Heat","Toxin",
+        "Combo Duration","Critical Chance","Critical Chance for Slide Attack","Critical Damage",
+        "Damage","Melee Damage","Finisher Damage","Fire Rate","Attack Speed",
+        "Projectile Speed","Initial Combo",
+        "Impact","Puncture","Slash",
+        "Magazine Capacity","Heavy Attack Efficiency","Multishot",
+        "Punch Through","Reload Speed","Range","Status Chance","Status Duration",
+        "Weapon Recoil","Zoom",
+    ]
+    
+    try:
+        # 1. Read the Image Bytes from the local file path
+        with open(filename, 'rb') as f:
+            image_bytes = f.read()
+        
+        # 2. Determine the MIME type (Crucial for the API to understand the image format)
+        # You'll need to infer this from the file extension (e.g., .png, .jpg)
+        mime_type = 'image/png' if filename.lower().endswith('.png') else 'image/jpeg'
+        
+        # --- REST OF THE LOGIC REMAINS THE SAME ---
+        
+        # 3. Define the Prompt and Output Instruction
+        prompt_text = f"""
+        # CRITICAL INSTRUCTION:
+        
+        1. **Translation & Identification:** Analyze the Riven Mod image. If any Riven-related text (especially the weapon name) is not in English, first translate it to English. Then, determine the official, canonical Warframe weapon name corresponding to the translated text. (e.g., "冷冻光束步枪" -> "Cryo Beam Rifle" -> Official Weapon: Glaxion).
+        2. **Weapon Name Verification:** Search for the determined weapon name on the official Warframe Wiki (https://wiki.warframe.com/). If the name exists but differs slightly from the translated name (e.g., if the image says "War Broken" but the wiki uses "Broken War"), replace the weapon name with the official Wiki title.
+        3. **Canonical Stat Conversion:** Convert the extracted English stat names to one of the following official canonical names. You **MUST** use a name from this list. If the extracted name is a variation (e.g., "Critical Hit Multiplier"), use the standard name (e.g., "Critical Damage").
+        
+        **CANONICAL STAT LIST (You MUST use a name from this list for every stat):**
+        {", ".join(all_stat_name)}
+        
+        Analyze the Warframe Riven Mod image.
+        
+        Extract the following data points:
+        1. **Riven Rank** (e.g., 10, 18)
+        2. **Weapon Name** (e.g., Cedo)
+        3. **Riven Naming** (The words near the weapon name, e.g., Crata-satitis)
+        4. **Stat 1 Value and Name** (e.g., 149.9CriticalChance)
+        5. **Stat 2 Value and Name** (e.g., 149.9CriticalChance)
+        6. **Stat 3 Value and Name** (e.g., 149.9CriticalChance)
+        7. **Stat 4 Value and Name** (e.g., 149.9CriticalChance)
+        
+        **CRITICAL OUTPUT FORMATTING INSTRUCTION:**
+        Return ONLY a single, concatenated string. Do not use spaces, or newlines.
+        The format must be:
+        <riven_rank><weapon_name><riven_naming><stat1_value><stat1_name><stat2_value><stat2_name><stat3_value><stat3_name><stat4_value><stat4_name>
+
+        If a stat is not present (e.g., no 3rd stat, or no 4th stat, or both), omit that part entirely.
+        
+        Example desired output:
+        18CedoCrita-satitis75.8CriticalDamage59Multishot92.3CriticalChance0.83DamagetoInfested
+        
+        Strictly adhere to this format.
+        """
+
+        # 4. Construct the Multimodal Request Parts
+        image_part = types.Part.from_bytes(
+            data=image_bytes,
+            mime_type=mime_type # Use the inferred MIME type
+        )
+
+        # contents = [image_part, types.Part.from_text(prompt_text)]
+        contents = [image_part, prompt_text]
+
+        # 5. Call the Gemini API
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=contents
+        )
+        
+        # 6. Clean and Return the Result
+        cleaned_output = response.text.strip().replace(' ', '').replace('+', '')
+        
+        return cleaned_output
+
+    except FileNotFoundError:
+        return f"ERROR: Local file not found at path: {filename}"
+    except Exception as e:
+        return f"CRITICAL ERROR during API call: {e}"
+        
 async def ocr_space_file(filename):
     try:
         payload = {
             "isOverlayRequired": False,
             "apikey": ocr_api,
-            "language": "eng",
+            "language": "auto",
             "ocrengine": "2",
             "scale": "true",
             "istable": "false",
@@ -415,13 +511,13 @@ async def check_ocr_space_api():
                         status_text = html[start_index:end_index].strip()
                         
                         if '<td class="tb_b_right">UP</td>' in status_text:
-                            return True, discord.Embed(title="OCR Space API Status", description="✅ UP", color=0x00FF00)
+                            return True, discord.Embed(title="OCR API Status", description="✅ UP", color=0x00FF00)
                         else:
-                            return False, discord.Embed(title="OCR Space API Status", description="❌ DOWN", color=0xFF0000)
+                            return False, discord.Embed(title="OCR API Status", description="❌ DOWN", color=0xFF0000)
                 
-                return discord.Embed(title="OCR Space API Status", description="⚠️ Unable to determine status", color=0xFFA500)
+                return discord.Embed(title="OCR API Status", description="⚠️ Unable to determine status", color=0xFFA500)
         except Exception as e:
-            return discord.Embed(title="OCR Space API Status", description=f"❌ Error: {str(e)}", color=0xFF0000)
+            return discord.Embed(title="OCR API Status", description=f"❌ Error: {str(e)}", color=0xFF0000)
 
 def get_buff_count(extracted_text: str):
     buff_count = 0
@@ -2100,6 +2196,42 @@ def check_out_range(riven_stat_details):
             
     return out_range, out_range_faction
 
+def non_english_detector(text: str) -> bool:
+    """
+    Detects if the text contains characters from a non-Latin script (e.g., Cyrillic,
+    Chinese) or Latin characters with diacritics (e.g., French, German).
+
+    It effectively ignores numbers, symbols, and non-letter punctuation by focusing
+    only on the letters/characters present.
+
+    Args:
+        text: The Riven mod text string.
+
+    Returns:
+        True if a non-English character/script is detected, False otherwise.
+    """
+    # 1. Check for Cyrillic script (Russian, Ukrainian)
+    # Range: \u0400 to \u04FF
+    if re.search(r'[\u0400-\u04FF]', text):
+        return True
+        
+    # 2. Check for CJK (Chinese, Japanese, Korean) characters.
+    # This is a broad range covering Han Ideographs, Hiragana, Katakana, and Hangul.
+    # Range: \u3040 to \u9FFF and \uAC00 to \uD7AF
+    if re.search(r'[\u3040-\u9FFF\uAC00-\uD7AF]', text):
+        return True
+
+    # 3. Check for common accented Latin characters (Diacritics).
+    # These are used in many Latin-based Warframe languages (French, German, Spanish, etc.)
+    # Examples: á, é, ü, ñ, ç, ß
+    if re.search(r'[áéíóúÁÉÍÓÚñÑüÜäöüÄÖÜßçÇèÉÊËëïîôœùûŸ]', text):
+        return True
+    
+    # If the text contains only unaccented Latin letters, spaces, numbers, and common symbols,
+    # the function returns False. It assumes the text is English (or a Latin language
+    # using no/few accents, which is too complex to determine without a dictionary).
+    return False
+
 async def process_grading(task: GradingTask, is_edit: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
         
@@ -2135,7 +2267,33 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             if task.raw_extracted_text is None:
                 # Process the image using OCR API
                 if task.ocr_engine == "OCR Space":
+                    print(f"OCR Space detection used...")
                     extracted_text = await ocr_space_file(output_riven)
+                    # extracted_text = "failed"
+                    
+                    non_english = False
+                    if non_english_detector(extracted_text) == True:
+                        non_english = True
+                        print(f"Non-english detected")
+                        print(f"OCR Space result : {extracted_text}")
+                    
+                    # Use Gemini if OCRSpace is unavailable
+                    if extracted_text == "failed" or non_english == True:
+                        print(f"Gemini detection used...")
+                        counter = 0
+                        while True:
+                            extracted_text = await gemini_api(output_riven)
+                            if "ERROR" not in extracted_text:
+                                break
+                            counter+=1
+                            
+                            if counter == 4:
+                                extracted_text = "Limit Reached"
+                                break
+                            
+                            print(f"{counter} , retrying....")
+                            await asyncio.sleep(5)    
+                        
                     task.raw_extracted_text = extracted_text  # Store the raw OCR result
                 print(f"RAW extracted_text : {extracted_text}")
             else:
@@ -2143,8 +2301,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 print(f"Using stored OCR result for regrade: {extracted_text}")
                 
             if extracted_text == "failed":
-                await task.interaction.followup.send(embed=discord.Embed(title="OCR Space API Status",description="❌Time out!",color=discord.Color.red()))
+                await task.interaction.followup.send(embed=discord.Embed(title="OCR API Status",description="❌ Down!",color=discord.Color.red()))
                 await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+                return
+            # extracted_text = "Limit Reached"
+            if extracted_text == "Limit Reached":
+                await task.interaction.followup.send(embed=discord.Embed(title="Secondary OCR API Status",description="❌ The limit have been reached! (20 requests per day)",color=discord.Color.red()).set_footer(text="Secondary OCR API is only used for non-English or when the main OCR API is unavailable."))
+                await task.interaction.channel.send("▶ If the riven is English text, try again later. The main OCR API is usually down for just a few minutes.\n▶ If the riven has **NON-ENGLISH** text, try again tomorrow (Reset at midnight Pacific Time) **OR** grade now using manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
                 return
             # return
     
@@ -2521,6 +2684,13 @@ async def crop_riven(interaction: discord.Interaction, image: discord.Attachment
                 if name == "riven_mod" and float(box.conf[0]) > 0.5:
                     # Get bounding box and crop
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    
+                    width = x2 - x1
+                    height = y2 - y1
+                    
+                    if height < width:
+                        continue
+                        
                     cropped = pil_img.crop((x1, y1, x2, y2))
 
                     # Save locally
@@ -2607,11 +2777,11 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
         weapon_type = "Auto"
         # riven_rank = "Auto"
         
-        is_up, status_embed = await check_ocr_space_api()
-        if not is_up:
-            await interaction.followup.send(embed=status_embed)
-            await interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
-            return
+        # is_up, status_embed = await check_ocr_space_api()
+        # if not is_up:
+            # await interaction.followup.send(embed=status_embed)
+            # await interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+            # return
         
         # First try to detect and crop Riven mods from the image
         try:
@@ -2633,8 +2803,19 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
 
                     if name == "riven_mod" and float(box.conf[0]) > 0.5:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        cropped = pil_img.crop((x1, y1, x2, y2))
-                        crops.append(cropped)
+                        
+                        # --- FIX START: Check if crop width is shorter than height ---
+                        width = x2 - x1
+                        height = y2 - y1
+
+                        # Only process if the height is greater than or equal to the width (i.e., not a landscape orientation)
+                        if height >= width:
+                            cropped = pil_img.crop((x1, y1, x2, y2))
+                            crops.append(cropped)
+                        # --- FIX END ---
+                        
+                        # cropped = pil_img.crop((x1, y1, x2, y2))
+                        # crops.append(cropped)
             
             # Only notify if multiple Rivens detected
             if len(crops) > 1:
@@ -2817,8 +2998,3 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
-
-
-
-
-
