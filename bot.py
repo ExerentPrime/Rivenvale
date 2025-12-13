@@ -467,7 +467,7 @@ async def ocr_space_file(filename):
         payload = {
             "isOverlayRequired": False,
             "apikey": ocr_api,
-            "language": "auto",
+            "language": "eng",
             "ocrengine": "2",
             "scale": "true",
             "istable": "false",
@@ -2998,3 +2998,4 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
+
