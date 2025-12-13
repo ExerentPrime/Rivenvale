@@ -2306,8 +2306,9 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 return
             # extracted_text = "Limit Reached"
             if extracted_text == "Limit Reached":
-                await task.interaction.followup.send(embed=discord.Embed(title="Secondary OCR API Status",description="❌ The limit have been reached! (20 requests per day)",color=discord.Color.red()).set_footer(text="Secondary OCR API is only used for non-English or when the main OCR API is unavailable."))
-                await task.interaction.channel.send("▶ If the riven is English text, try again later. The main OCR API is usually down for just a few minutes.\n▶ If the riven has **NON-ENGLISH** text, try again tomorrow (Reset at midnight Pacific Time) **OR** grade now using manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+                await task.interaction.followup.send(embed=discord.Embed(title="Secondary OCR API Status",description="❌ The limit have been reached! (20 requests per day)",color=discord.Color.red()).set_footer(text="Secondary OCR API is only used when the main OCR API is unavailable."))
+                await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+                #await task.interaction.channel.send("▶ If the riven is English text, try again later. The main OCR API is usually down for just a few minutes.\n▶ If the riven has **NON-ENGLISH** text, try again tomorrow (Reset at midnight Pacific Time) **OR** grade now using manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
                 return
             # return
     
@@ -2998,4 +2999,5 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
+
 
