@@ -2823,12 +2823,12 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
                 await interaction.followup.send(f"🔍 Detected {len(crops)} Riven mods. Processing ...")
             elif not crops:
                 crops = [pil_img]
-                await interaction.followup.send("⚠️ No Riven mods detected. Processing entire image...")
+                await interaction.followup.send("⚠️ Auto Riven mod detection failed. Processing entire image...")
                 
         except Exception as e:
             print(f"Error in crop detection: {e}")
             crops = [Image.open(BytesIO(await image.read()))]
-            await interaction.followup.send("⚠️ Riven detection failed. Processing entire image...")
+            await interaction.followup.send("⚠️ Auto Riven mod detection failed. Processing entire image...")
 
         # Process each cropped Riven mod
         for i, crop in enumerate(crops):
