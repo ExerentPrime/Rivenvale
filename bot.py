@@ -409,7 +409,7 @@ async def gemini_api(filename):
         1. **Translation & Identification:** Analyze the Riven Mod image. If any Riven-related text (especially the weapon name) is not in English, first translate it to English. Then, determine the official, canonical Warframe weapon name corresponding to the translated text. (e.g., "冷冻光束步枪" -> "Cryo Beam Rifle" -> Official Weapon: Glaxion).
         2. **Weapon Name Verification:** Search for the determined weapon name on the official Warframe Wiki (https://wiki.warframe.com/). If the name exists but differs slightly from the translated name (e.g., if the image says "War Broken" but the wiki uses "Broken War"), replace the weapon name with the official Wiki title.
         3. **Canonical Stat Conversion:** Convert the extracted English stat names to one of the following official canonical names. You **MUST** use a name from this list. If the extracted name is a variation (e.g., "Critical Hit Multiplier"), use the standard name (e.g., "Critical Damage").
-        
+        4. **Special Case:** If only "Vinquibus (Melee)" exist in the image, always set the weapon name to "Vinquibusmelee" instead of "Vinquibus".
         **CANONICAL STAT LIST (You MUST use a name from this list for every stat):**
         {", ".join(all_stat_name)}
         
@@ -853,14 +853,17 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
     fixes = {
         "Ax-52": "AX-52",
         "Efv-8Mars": "EFV-8Mars",
-        "Efv-5Jupiter": "EFV-5Jupiter"
+        "Efv-5Jupiter": "EFV-5Jupiter",
+        "VinquibusMelee": "Vinquibusmelee"
     }
 
     # Apply replacements
     for incorrect, correct in fixes.items():
         extracted_text = extracted_text.replace(incorrect, correct)
-        break
-
+        # break
+    
+    # print(f"extracted_text ============= \n{extracted_text}")
+    
     # # Fix for AX-52
     # if "Ax-52" in extracted_text:
         # extracted_text = extracted_text.replace("Ax-52","AX-52")
@@ -923,6 +926,7 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
                 if match:
                     extracted_text = extracted_text[:match.start()] + extracted_text[match.end():]
             else: #other weapon
+                extracted_text_copy = extracted_text
                 if temp_name in extracted_text:
                     extracted_text = re.sub(r'.*?' + temp_name, '', extracted_text)
                 elif temp_name.title() in extracted_text:
@@ -939,6 +943,11 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
             # Get weapon type
             if weapon_type == "Auto":
                 temp_type = weapon['productCategory']
+                
+                if weapon_name == "Vinquibus":
+                    if "Vinquibusmelee" in extracted_text_copy:
+                        temp_type = "Melee"
+                        
                 if temp_type == "LongGuns":
                     if is_shotgun(weapon_name):
                         weapon_type = "Shotgun"
@@ -2358,6 +2367,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # Get weapon name and type on riven mod. Also riven rank if possible
             weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank)
             print(f"weapon_name : {weapon_name}")
+            print(f"weapon_type : {task.weapon_type}")
             if weapon_name_found == False:
                 if task.ocr_engine != "Manual":
                     await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
@@ -2467,11 +2477,15 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # return
             # Get weapon disposition and update weapon name with variant
             weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, task.weapon_variant, task.weapon_type)
-    
+            
             if weapon_dispo == 0:
                 await task.interaction.followup.send(f"{weapon_name} disposition not found! Please ensure the input is correct.")  # Use followup
                 return
-    
+            
+            # Update Vinquibus name if melee
+            if weapon_name == "Vinquibus" and task.weapon_type == "Melee":
+                weapon_name = "Vinquibus (Melee)"
+            
             # Get value and stat name
             try:
                 get_value_and_stat_name(extracted_text, riven_stat_details)
@@ -2999,5 +3013,3 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 # Run the bot
 client.run(TOKEN)
-
-
