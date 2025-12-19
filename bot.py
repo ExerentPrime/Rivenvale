@@ -349,7 +349,12 @@ async def resize_large_image(image_path: str, max_size: int = 1920) -> None:
             else:
                 new_height = max_size
                 new_width = int((max_size / height) * width)
-                
+            
+            # --- Anti-Moiré Step ---
+            # Applying a very slight blur helps merge pixel gaps before resizing
+            if width > max_size or height > max_size:
+                img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+            # print("apply blur trigger!")
             # Resize the image
             resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
