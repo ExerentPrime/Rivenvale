@@ -2370,8 +2370,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             print(f"weapon_type : {task.weapon_type}")
             if weapon_name_found == False:
                 if task.ocr_engine != "Manual":
-                    await task.interaction.followup.send(f"Weapon name not found! Please ensure the Riven Mod details are fully visible and not obscured.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
-                    # os.remove(output_riven)
+                    await task.interaction.followup.send(
+                        f"**Weapon name not found!**\n"
+                        f"▶ Ensure all Riven Mod details are fully visible and not obscured.\n"
+                        f"▶ If using a phone camera, avoid taking photos too close to the screen. Visible pixels or '[moire patterns](<https://www.google.com/search?q=what+is+moire+patterns>)' can interfere with detection.\n\n"
+                        f"**Detected Text:**\n`{extracted_text}`", 
+                        file=discord.File(output_riven)
+)                    # os.remove(output_riven)
                     return
                 else:
                     await task.interaction.followup.send(f"Weapon name not found! Please make sure to select the weapon name from the autocomplete suggestions.\n{extracted_text}")  # Use followup
@@ -3003,6 +3008,10 @@ async def on_ready():
         ]
         # Use your existing function to get base names and remove duplicates
         all_weapon_name = list(set([get_base_weapon_name(name) for name in all_weapons]))
+        
+        # Manually add weapon name
+        all_weapon_name.append("Vinquibus (melee)")
+        
         print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete.")
         
     except Exception as e:
