@@ -72,7 +72,7 @@ OCR_API=K99999999999999
 Install required packages with:
 
 ```
-pip install aiohttp discord.py pillow requests pandas ultralytics numpy python-dotenv
+pip install aiohttp discord.py pillow requests pandas ultralytics numpy python-dotenv google-genai
 ```
 
 ## 🚀 Running the Bot
