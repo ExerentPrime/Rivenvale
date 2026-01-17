@@ -3242,7 +3242,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             if task.ocr_engine == "Random" and task.reroll_counter > 0:
                 title_text = "RANDOM GRADING 🔀"
-                display_counter_cost = f"**Reroll Counter** : {task.reroll_counter}\n**Kuva Cost** : {task.kuva_cost}\n"
+                display_counter_cost = f"**Reroll Counter** : {task.reroll_counter}\n**Kuva Cost** : {task.kuva_cost:,}\n"
                 description_text = f"{task.interaction.user.mention}\n{display_counter_cost}\n{add_text}"
             elif task.ocr_engine == "Random" and task.reroll_counter == 0:
                 title_text = "RANDOM GRADING 🔀"
