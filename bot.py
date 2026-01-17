@@ -2666,7 +2666,7 @@ async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_va
                 if s not in elements and s not in buffs:
                     if weapon_type == "Melee" and s != "Melee Damage": # Melee Damage never be curse stat
                         curse_pool.append(s)
-                    if weapon_type != "Melee":
+                    if weapon_type != "Melee" and s != "Punch Through":
                         curse_pool.append(s)
             
             # Pick the 1 CURSE
