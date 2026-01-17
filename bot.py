@@ -15,6 +15,7 @@ import numpy as np
 import traceback
 from google import genai
 from google.genai import types
+import random
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -48,6 +49,152 @@ except Exception:
     print("FATAL ERROR: Please set the GEMINI_API_KEY environment variable.")
     gemini_client = None
 
+class RerollView(discord.ui.View):
+    def __init__(self, original_message: discord.Message, weapon_name, weapon_type, weapon_variant, original_user, reroll_counter = 0, kuva_cost = 0):
+        super().__init__(timeout=180) # Set to None = doesn't expire
+        self.original_message = original_message
+        self.weapon_name = weapon_name
+        self.weapon_type = weapon_type
+        self.weapon_variant = weapon_variant
+        self.original_user = original_user
+        self.reroll_counter = reroll_counter
+        self.kuva_cost = kuva_cost
+        
+    @discord.ui.button(label="New Random", style=discord.ButtonStyle.primary, emoji="♻️")
+    async def newrandom_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        
+        if interaction.user != self.original_user:
+            await interaction.response.send_message("You can only reroll your own commands. Please run **/random** to get your own result.", ephemeral=True)
+            return
+
+        # Defer so Discord doesn't timeout while we generate the new image
+        await interaction.response.defer()
+
+        task = await random_reroll(interaction, None, None, None)
+        
+        result = await process_grading(task, new_random=True)
+        
+        if result is None:
+            await interaction.followup.send(
+                "Failed to create new random",
+                ephemeral=True
+            )
+            print("\n" + "=" * 34)
+            print("|        NEW RANDOM FAILED        |")
+            print("=" * 34 + "\n")
+
+            return
+        
+        new_image_path, new_embed = result
+            
+        if new_image_path:
+            with open(new_image_path, 'rb') as f:
+                file = discord.File(f)
+                await self.original_message.edit(
+                    attachments=[file],
+                    embed=new_embed,
+                    view=self
+                )
+        
+        ## Update/Reset weapon details for reroll
+        self.weapon_name = task.weapon_name
+        self.weapon_type = task.weapon_type
+        self.weapon_variant = task.weapon_variant
+        self.reroll_counter = 0
+        self.kuva_cost = 0
+        print(f"##### {self.weapon_name} #####")
+        
+        print("\n" + "=" * 34)
+        print("|       NEW RANDOM COMPLETE       |")
+        print("=" * 34 + "\n")
+    
+    @discord.ui.button(label="Reroll", style=discord.ButtonStyle.secondary, emoji="🎲")
+    async def reroll_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        print(f"##### {self.weapon_name} #####")
+        if interaction.user != self.original_user:
+            await interaction.response.send_message("You can only reroll your own commands. Please run **/random** to get your own result.", ephemeral=True)
+            return
+
+        # Defer so Discord doesn't timeout while we generate the new image
+        await interaction.response.defer()
+
+        # Get base weapon name (remove variant if present)
+        self.weapon_name = get_base_weapon_name(self.weapon_name)
+        
+        task = await random_reroll(interaction, self.weapon_name, self.weapon_type, self.weapon_variant)
+        
+        self.reroll_counter += 1
+        task.reroll_counter = self.reroll_counter
+        
+        # Reroll counter and kuva cost
+        if task.reroll_counter == 1:
+            self.kuva_cost += 900
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 2:
+            self.kuva_cost += 1000
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 3:
+            self.kuva_cost += 1200
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 4:
+            self.kuva_cost += 1400
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 5:
+            self.kuva_cost += 1700
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 6:
+            self.kuva_cost += 2000
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 7:
+            self.kuva_cost += 2350
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 8:
+            self.kuva_cost += 2750
+            task.kuva_cost = self.kuva_cost
+        elif task.reroll_counter == 9:
+            self.kuva_cost += 3150  
+            task.kuva_cost = self.kuva_cost
+        else:
+            self.kuva_cost += 3500  
+            task.kuva_cost = self.kuva_cost
+        
+        result = await process_grading(task, is_reroll=True)
+        
+        if result is None:
+            await interaction.followup.send(
+                "Failed to reroll",
+                ephemeral=True
+            )
+            print("\n" + "=" * 31)
+            print("|        REROLL FAILED        |")
+            print("=" * 31 + "\n")
+
+            return
+        
+        new_image_path, new_embed = result
+            
+        if new_image_path:
+            with open(new_image_path, 'rb') as f:
+                file = discord.File(f)
+                await self.original_message.edit(
+                    attachments=[file],
+                    embed=new_embed,
+                    view=self
+                )
+        
+        print("\n" + "=" * 31)
+        print("|       REROLL COMPLETE       |")
+        print("=" * 31 + "\n")
+        
+    async def on_timeout(self):
+        # Disable all components when the view times out
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.original_message.edit(view=self)
+        except:
+            pass
+            
 class RegradeView(discord.ui.View):
     def __init__(self, original_message: discord.Message, original_image_path: str, weapon_name: str, buff_count: int, ocr_engine: str, riven_rank: str, platinum: str = None):
         super().__init__(timeout=180)  # 3 minute timeout
@@ -92,7 +239,7 @@ class RegradeView(discord.ui.View):
             variant_options.append(
                 discord.SelectOption(label=display_name, value=value)
             )
-        
+            
         # Variant dropdown
         self.variant_select = discord.ui.Select(
             placeholder="Select weapon variant",
@@ -187,10 +334,11 @@ class RivenStatDetails:
         self.Min = [999.9] * 4   # List of 4 doubles (floating-point numbers)
         self.Max = [999.9] * 4   # List of 4 doubles (floating-point numbers)
         self.Grade = [""] * 4
-        self.Normalize = [0.000] * 4 
+        self.Normalize = [0.000] * 4
+        self.Highlight = [""] * 4
 
 class GradingTask:
-    def __init__(self, interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine, buff_count):
+    def __init__(self, interaction, weapon_variant, weapon_type, riven_rank, image, platinum, ocr_engine, buff_count, weapon_name = None, reroll_counter = 0, kuva_cost = 0):
         self.interaction = interaction
         self.weapon_variant = weapon_variant
         self.weapon_type = weapon_type
@@ -199,7 +347,10 @@ class GradingTask:
         self.platinum = platinum
         self.ocr_engine = ocr_engine
         self.raw_extracted_text = None
-        self.buff_count = buff_count 
+        self.buff_count = buff_count
+        self.weapon_name = weapon_name
+        self.reroll_counter = reroll_counter
+        self.kuva_cost = kuva_cost
 
 def special_base_names(extract_text: str, weapon_name: str):
     all_special_base_names = [
@@ -208,7 +359,7 @@ def special_base_names(extract_text: str, weapon_name: str):
         "Kuva Shildeg","Kuva Bramma","Kuva Chakkhurr","Kuva Twin Stubbas","Kuva Ayanga",
         "Coda Motovore","Coda Bassocyst","Dual Coda Torxica",
         "Dex Dakra","Dex Nikana",
-        "Twin Krohkur","Twin Grakatas","Twin Kohmak","Twin Vipers",
+        "Twin Krohkur","Twin Grakatas","Twin Kohmak","Kohmak","Twin Vipers",
         "Dragon Nikana","Mutalist Cernos","Mutalist Quanta","Proboscis Cernos","Dual Skana"
     ]
     
@@ -231,7 +382,14 @@ def get_base_weapon_name(full_name: str) -> str:
     #fix for Pangolin Sword and Prime
     if "Pangolin" in full_name:
         return "Pangolin Sword"
-        
+    
+    #Fix for Ceti Lacera
+    if "Ceti Lacera" in full_name:
+        return "Lacera"
+    
+    #Fix for Prisma Dual Decurions
+    if "Prisma Dual Decurions" in full_name:
+        return "Dual Decurion"
     # Fix for Twin weapon
         
     """Extracts base weapon name by removing known variant suffixes"""
@@ -272,6 +430,10 @@ def get_available_variants(file_path: str, base_weapon_name: str) -> list:
         if "Bo" == base_weapon_name:
             return ["Bo", "Bo Prime", "MK1-Bo"]
         
+        # Fix for Lacera
+        if "Lacera" == base_weapon_name:
+            return ["Lacera", "Ceti Lacera"]
+            
         data = load_weapon_data(file_path)
         variants = set()
         
@@ -781,6 +943,9 @@ def is_zaw(weapon_name: str) -> bool:
         return False
         
 def get_type_sentinel_weapon(name: str) -> str:
+    
+    name = get_base_weapon_name(name)
+    
     if name == "Akaten":
         return "Melee"
     elif name == "Artax":
@@ -788,7 +953,7 @@ def get_type_sentinel_weapon(name: str) -> str:
     elif name == "Batoten":
         return "Melee"
     elif name == "Burst Laser":
-        return "Pistol"
+        return "Pistols"
     elif name == "Cryotra":
         return "Rifle"
     elif name == "Deconstructor":
@@ -848,7 +1013,7 @@ def special_case_fix(extracted_text):
     else:
         return ""
 
-def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven_rank:str):
+def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven_rank:str, weapon_variant:str):
     weapon_name = ""
     weapon_name_found = False
     
@@ -883,6 +1048,11 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
     
     for weapon in data.get("ExportWeapons", []):
         temp_name = weapon['name']
+        
+        # variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
+        # if weapon_variant in variants:
+            # if weapon_variant not in temp_name:
+                # continue
         
         # bug fix for Lexi detect as Lex (weapon)
         if temp_name == "Lex":
@@ -942,7 +1112,7 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
             # For Kitguns, set default type based on variant
             if is_kitgun(weapon_name):
                 if weapon_type == "Auto":
-                    weapon_type = "Pistol"  # Default to Secondary
+                    weapon_type = "Pistols"  # Default to Secondary
                     return weapon_name, weapon_name_found, weapon_type, riven_rank, extracted_text
             
             # Get weapon type
@@ -968,7 +1138,7 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
                     elif is_kitgun(weapon_name):
                         weapon_type = "Kitgun"
                     else:
-                        weapon_type = "Pistol"
+                        weapon_type = "Pistols"
                 elif temp_type == "Melee":
                     weapon_type = "Melee"
                 elif temp_type == "SpaceGuns":
@@ -983,7 +1153,7 @@ def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weap
     data = load_weapon_data(file_path)
     # Combine name with weapon_variant
     weapon_name = combine_with_variant(weapon_name, weapon_variant)
-    
+    # print(f"### Weapon Name in getdispo : {weapon_name}")
     for weapon in data.get("ExportWeapons", []):
         if weapon_name == weapon['name']:
             # Updated weapon name with variant
@@ -992,7 +1162,7 @@ def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weap
             if is_kitgun(weapon_name) == True:
                 if weapon_type == "Rifle" or weapon_type == "Shotgun":
                     weapon_dispo = weapon['primeOmegaAttenuation']
-                elif weapon_type == "Pistol":
+                elif weapon_type == "Pistols":
                     weapon_dispo = weapon['omegaAttenuation']
             else:
                 weapon_dispo = weapon['omegaAttenuation']
@@ -1002,6 +1172,10 @@ def get_weapon_dispo(file_path: str, weapon_name: str, weapon_variant: str, weap
     return weapon_dispo, weapon_name
     
 def combine_with_variant(weapon_name: str, weapon_variant: str) -> str:
+    #fix for lacera
+    if weapon_variant == "Ceti":
+        return "Ceti Lacera"
+    
     if is_kitgun(weapon_name):
         return weapon_name
     
@@ -1463,11 +1637,11 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
     if stat == "Additional Combo Count Chance":
         return 58.77
     elif stat == "Chance to Gain Combo Count":
-        return 104.85
+        return 58.77
     elif stat == "Ammo Maximum":
         if weapon_type == "Rifle":
             return 49.95
-        elif weapon_type in ["Shotgun", "Pistol"]:
+        elif weapon_type in ["Shotgun", "Pistols"]:
             return 90
         else:
             return 99.9  # Archgun
@@ -1481,7 +1655,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
     elif stat == "Combo Duration":
         return 8.1
     elif stat == "Critical Chance":
-        if weapon_type in ["Rifle", "Pistol"]:
+        if weapon_type in ["Rifle", "Pistols"]:
             return 149.99
         elif weapon_type == "Shotgun":
             return 90
@@ -1494,7 +1668,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
     elif stat == "Critical Damage":
         if weapon_type == "Rifle":
             return 120
-        elif weapon_type in ["Shotgun", "Pistol", "Melee"]:
+        elif weapon_type in ["Shotgun", "Pistols", "Melee"]:
             return 90
         else:
             return 80.1  # Archgun
@@ -1503,7 +1677,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
             return 165
         elif weapon_type in ["Shotgun", "Melee"]:
             return 164.7
-        elif weapon_type == "Pistol":
+        elif weapon_type == "Pistols":
             return 219.6
         else:
             return 99.9  # Archgun
@@ -1514,12 +1688,12 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
             return 60.03
         elif weapon_type == "Shotgun":
             return 89.1
-        elif weapon_type == "Pistol":
+        elif weapon_type == "Pistols":
             return 74.7
         else:
             return 54.9  # Melee
     elif stat == "Projectile Speed":
-        if weapon_type in ["Rifle", "Pistol"]:
+        if weapon_type in ["Rifle", "Pistols"]:
             return 90
         else:
             return 89.1  # Shotgun
@@ -1540,14 +1714,14 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
     elif stat == "Multishot":
         if weapon_type == "Rifle":
             return 90
-        elif weapon_type in ["Shotgun", "Pistol"]:
+        elif weapon_type in ["Shotgun", "Pistols"]:
             return 119.7
         else:
             return 60.3  # Archgun
     elif stat == "Punch Through":
         return 2.7
     elif stat == "Reload Speed":
-        if weapon_type in ["Rifle", "Pistol"]:
+        if weapon_type in ["Rifle", "Pistols"]:
             return 50
         elif weapon_type == "Shotgun":
             return 49.45
@@ -1561,7 +1735,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
         else:
             return 90
     elif stat == "Status Duration":
-        if weapon_type in ["Rifle", "Pistol", "Archgun"]:
+        if weapon_type in ["Rifle", "Pistols", "Archgun"]:
             return 99.99
         else:
             return 99
@@ -1737,7 +1911,7 @@ def damage_to_faction_fix(riven_stat_details, i):
         else:
             riven_stat_details.Value[i] = (1 - riven_stat_details.Value[i]) * 100
 
-def get_grade_new(normalize):
+def get_grade_new(normalize, riven_stat_details, i):
     if -11.5 < normalize <= -9.5:
         return "F"
     elif -9.5 < normalize <= -7.5:
@@ -1761,8 +1935,12 @@ def get_grade_new(normalize):
     elif 9.5 < normalize <= 11.5:
         return "S"
     else:
-        # print("GRADING ERROR. Make sure weapon variant selected is correct")
-        return "??"
+        if round(riven_stat_details.Min[i] , 1) == riven_stat_details.Value[i]:
+            return "F"
+        elif riven_stat_details.Value[i] == round(riven_stat_details.Max[i] , 1):
+            return "S"
+        else:# print("GRADING ERROR. Make sure weapon variant selected is correct")
+            return "??"
             
 def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
     for i in range(riven_stat_details.StatCount):
@@ -1778,11 +1956,11 @@ def set_grade_new(riven_stat_details, weapon_type, weapon_dispo, riven_rank):
         normalize = round(normalize, 3)
         # print(f"normalize VALUE {i+1} : {normalize}")
         if i == riven_stat_details.StatCount - 1 and "1 Curse" in riven_stat_details.RivenType:
-            riven_stat_details.Grade[i] = get_grade_new(-normalize)
+            riven_stat_details.Grade[i] = get_grade_new(-normalize, riven_stat_details, i)
             print(f"Grade Value Curse : {-normalize}")
             riven_stat_details.Normalize[i] = -normalize
         else:
-            riven_stat_details.Grade[i] = get_grade_new(normalize)
+            riven_stat_details.Grade[i] = get_grade_new(normalize, riven_stat_details, i)
             print(f"Grade Value Buff {i+1} : {normalize}")
             riven_stat_details.Normalize[i] = normalize
 
@@ -1836,7 +2014,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
     riven_image_x = 33 + (box_width - riven_image.width) // 2
     riven_image_y = (box_height - riven_image.height) // 2
     
-    if ocr_engine != "Manual":
+    if ocr_engine == "OCR Space":
         background.paste(riven_image, (riven_image_x, riven_image_y)) # not transparent
     else:
         background.paste(riven_image, (riven_image_x, riven_image_y), riven_image) # transparent
@@ -1920,7 +2098,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
             fill_color = get_grade_color(grade_text)
             draw.text(position, grade_text, fill=fill_color, font=grade_font)
 
-    # Draw stat names
+    # Draw stat names AND highlight
     # Round to 1 decimal place
     # for i in range(riven_stat_details.StatCount):
         # if "Damage to" in riven_stat_details.StatName[i]:
@@ -1937,12 +2115,55 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         {"statname": combine_stat_3, "position": (354, 181)},
         {"statname": combine_stat_4, "position": (354, 249)},
     ]
+    
+    # Define your colors
+    color1 = (255, 255, 0)
+    color2 = (0, 255, 0)
+    # Create a master gradient (e.g., 500x100 is usually enough for a stat line)
+    master_size = 300
+    master_gradient = Image.new("RGBA", (master_size, master_size))
+    
+    for y in range(master_size):
+        for x in range(master_size):
+            # 45-degree diagonal math
+            progress = (x + y) / (master_size * 2) 
+            r = int(color1[0] + (color2[0] - color1[0]) * progress)
+            g = int(color1[1] + (color2[1] - color1[1]) * progress)
+            b = int(color1[2] + (color2[2] - color1[2]) * progress)
+            master_gradient.putpixel((x, y), (r, g, b, 255))
+    
+    i = 0
     for statname_data in statnames:
         statname_text = statname_data["statname"]
         position = statname_data["position"]
+        
         if "999.9" not in statname_text:
-            draw.text(position, statname_text, fill="white", font=default_font)
-    
+            if riven_stat_details.Highlight[i] == "Good":
+                # 1. Measure text
+                bbox = draw.textbbox((0, 0), statname_text, font=default_font)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
+            
+                # Add a tiny bit of padding to prevent cutting off edges
+                grad_size = (text_w + 10, text_h + 10)
+
+                # 2. Resize the master gradient to fit this specific text line
+                # This ensures the full color range is visible in every stat
+                stat_grad = master_gradient.resize(grad_size, Image.LANCZOS)
+
+                # 3. Create the Mask
+                mask = Image.new("L", grad_size, 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.text((0, 0), statname_text, fill=255, font=default_font)
+
+                # 4. Paste
+                background.paste(stat_grad, position, mask)
+            elif riven_stat_details.Highlight[i] == "Bad":
+                draw.text(position, statname_text, fill=(255, 75, 75), font=default_font)
+            else:
+                draw.text(position, statname_text, fill="white", font=default_font)
+        i += 1
+        
     # Draw min stats
     # Round to 1 decimal place
     for i in range(riven_stat_details.StatCount):
@@ -1994,7 +2215,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
             draw.text((x_position, y_position), max_text, fill="white", font=default_font)
     
     # Recreate riven mod - For manual grading only
-    if ocr_engine == "Manual":
+    if ocr_engine != "OCR Space":
         weapon_name_font_size = 14
         stat_font_size = 12
         dpi = 96
@@ -2246,21 +2467,357 @@ def non_english_detector(text: str) -> bool:
     # using no/few accents, which is too complex to determine without a dictionary).
     return False
 
-async def process_grading(task: GradingTask, is_edit: bool = False):
+async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_variant:str = None):
+    
+    try:
+        # GET RANDOM WEAPON NAME
+        if name:
+            for w in all_weapon_name:
+                if w["name"] == name:
+                    name = w["name"]
+                    category = w["category"]
+        else:
+            random_weapon = random.choice(all_weapon_name)
+            name = random_weapon["name"]
+            category = random_weapon["category"]
+        # name = "Laetum"
+        # category = "Pistols"
+        print(f"### Random Pick Name  : {name}")
+        print(f"### Category : {category}\n")
+        
+        if is_kitgun(name) == False and weapon_variant == None:
+            weapon_type = category
+        
+        ## FIX WEAPON TYPE
+        # slot = random.choice(kitguns_variant)
+        if is_kitgun(name) and weapon_type == None:
+            kitguns_variant = ["Primary", "Secondary"]
+            weapon_variant = random.choice(kitguns_variant)
+            print(f"### Random Pick Variant Kitgun  : {weapon_variant}")
+            if weapon_variant == "Primary":
+                if name == "Catchmoon":
+                    weapon_type = "Shotgun"
+                elif name == "Sporelacer":
+                    weapon_type = "Shotgun"
+                else:
+                    weapon_type = "Rifle"
+            elif weapon_variant == "Secondary":
+                weapon_type = "Pistols"
+        
+        ## Fix for shotgun    
+        if weapon_type == "LongGuns":
+            if is_shotgun(name):
+                weapon_type = "Shotgun"
+            else:
+                weapon_type = "Rifle"
+        ## Fix for Archwing gun
+        if weapon_type == "SpaceGuns":
+            weapon_type = "Archgun"
+        
+        ## Fix for Zaw
+        if is_zaw(name):
+            weapon_type = "Melee"
+            
+        ## Fix for SentinelWeapons
+        if weapon_type == "SentinelWeapons":
+            weapon_type = get_type_sentinel_weapon(name)
+        
+        # GET BEST VARIANT AND DISPO OF WEAPON
+        # weapon_variant = "Prime"
+        is_special_base_names, wp = special_base_names("",name)
+        if weapon_variant == None and not is_special_base_names:
+            variants = get_available_variants(file_path, name)
+            print(f"## Variant Available : {variants} ##")
+            lowest_dispo = 99
+            lowest_name = "Random Name"
+            
+            if len(variants) > 1:
+                for v in variants:
+                    # get weapon disposition
+                    # remove base name in v
+                    # print(f"v before : {v}")
+                    if v == name:
+                        v = "Normal"
+                    # Fix for Pangolin
+                    elif "Pangolin" in v:
+                        v = "Prime"
+                    else:
+                        v = v.replace(name, "").strip()
+                        v = v.replace("-", "")
+                        # print(f"v after : {v}")
+                    
+                    weapon_dispo, new_name = get_weapon_dispo(file_path, name, v, weapon_type)
+                
+                    if weapon_dispo < lowest_dispo:
+                        print(f" Lowest Dispo updated from {lowest_dispo} to {weapon_dispo}")
+                        lowest_dispo = weapon_dispo
+                        lowest_name = new_name
+                        lowest_variant = v
+                    elif weapon_dispo == lowest_dispo and "Prime" in new_name:
+                        print(f" Lowest Dispo updated from {lowest_dispo} to {weapon_dispo}")
+                        lowest_dispo = weapon_dispo
+                        lowest_name = new_name
+                        lowest_variant = v
+            
+                print(f" Lowest Dispo : {lowest_dispo}")
+                print(f" Lowest Name : {lowest_name}")
+                weapon_dispo = lowest_dispo
+                name = lowest_name
+                weapon_variant = lowest_variant
+            else:
+                weapon_dispo, new_name = get_weapon_dispo(file_path, name, weapon_variant, weapon_type)
+        else: # for reroll
+            # get weapon disposition
+            weapon_dispo, name = get_weapon_dispo(file_path, name, weapon_variant, weapon_type)
+        
+        # print(f"## Name for Dispo : {name} ##")
+        # print(f"## Variant for Dispo : {weapon_variant} ##")
+        # print(f"## Weapon Type for Dispo : {weapon_type} ##")
+        
+        # GET RANDOM RIVEN TYPE
+        riven_type = ["2 Buff 0 Curse","2 Buff 1 Curse","3 Buff 0 Curse","3 Buff 1 Curse",]
+        pick_riven_type = random.choice(riven_type)
+        if pick_riven_type == "2 Buff 0 Curse":
+            buff = 2
+            curse = 0
+        elif pick_riven_type == "2 Buff 1 Curse":
+            buff = 2
+            curse = 1
+        elif pick_riven_type == "3 Buff 0 Curse":
+            buff = 3
+            curse = 0
+        else: # 3 Buff 1 Curse
+            buff = 3
+            curse = 1
+        
+        StatCount = buff + curse
+        
+        # GET RANDOM STAT NAME
+        # Shared stats (Elemental, Faction damage, etc.)
+        generic_stats = [
+            "Damage to Corpus", "Damage to Grineer", "Damage to Infested",
+            "Cold", "Electricity", "Heat", "Toxin", "Status Chance", "Status Duration",
+            "Critical Chance", "Critical Damage",
+            "Impact", "Puncture", "Slash"
+        ]
+
+        # Ranged only (Rifles, Pistols, Shotguns)
+        ranged_stats = [
+            "Ammo Maximum", "Damage",
+            "Fire Rate", "Projectile Speed", "Magazine Capacity", "Multishot", 
+            "Punch Through", "Reload Speed", "Weapon Recoil", "Zoom"
+        ]
+
+        # Melee only
+        melee_stats = [
+            "Additional Combo Count Chance", 
+            "Combo Duration", "Melee Damage", 
+            "Finisher Damage", "Attack Speed", "Initial Combo", 
+            "Heavy Attack Efficiency", "Range"
+        ]
+        
+        # Malus Melee only
+        # exclusive = "Chance to Gain Combo Count"
+        
+        elements = ["Cold", "Electricity", "Heat", "Toxin"]
+        
+        physicals = ["Impact", "Puncture", "Slash"]
+        
+        if weapon_type == "Melee":
+            pool = generic_stats + melee_stats
+            # if "1 Curse" in pick_riven_type:
+                # pool.append(exclusive)
+        else:
+            pool = generic_stats + ranged_stats
+            
+        # Check IPS
+        all_damage = []
+        data = load_weapon_data(file_path)
+        for weapon in data.get("ExportWeapons", []):
+            temp_name = weapon['name']
+            if temp_name == name:
+                all_damage = weapon['damagePerShot']
+                break
+        
+        if all_damage[0] == 0:
+            pool.remove("Impact")
+            print(f"Impact has been removed from pool")
+        if all_damage[1] == 0:
+            pool.remove("Puncture")
+            print(f"Puncture has been removed from pool")
+        if all_damage[2] == 0:
+            pool.remove("Slash")
+            print(f"Slash has been removed from pool")
+            
+        # # Melee Damage should never be curse stat
+        # if "1 Curse" in pick_riven_type and weapon_type == "Melee":
+            # pool.remove("Melee Damage")
+            # print(f"Melee Damage has been removed from pool")
+        
+        if "1 Curse" in pick_riven_type:
+            # Pick the BUFFS first (all stats except the last one)
+            # We pick (StatCount - 1) stats from the full pool
+            buffs = random.sample(pool, StatCount - 1)
+            
+            # Create a CURSE POOL that has no elements AND no stats already picked as buffs
+            # curse_pool = [s for s in pool if s not in elements and s not in buffs]
+            curse_pool = []
+            for s in pool:
+                if s not in elements and s not in buffs:
+                    if weapon_type == "Melee" and s != "Melee Damage": # Melee Damage never be curse stat
+                        curse_pool.append(s)
+                    if weapon_type != "Melee":
+                        curse_pool.append(s)
+            
+            # Pick the 1 CURSE
+            if curse_pool:
+                curse = random.sample(curse_pool, 1)
+                selected_stats = buffs + curse
+            else:
+                # Fallback if curse_pool is empty
+                selected_stats = buffs + random.sample([s for s in pool if s not in buffs], 1)
+                
+            # Fix stat name if Malus
+            if weapon_type == "Melee" and selected_stats[-1] == "Additional Combo Count Chance":
+                selected_stats[-1] = "Chance to Gain Combo Count"
+        else:
+            # If no curse, just pick normally
+            selected_stats = random.sample(pool, StatCount)
+        
+        # "Exclusive" move-to-back logic
+        # change Additional Combo Count Chance to Chance to Gain Combo Count if melee and malus stat
+        # if exclusive in selected_stats:
+            # selected_stats.remove(exclusive)
+            # selected_stats.append(exclusive)
+        
+        while len(selected_stats) < 4:
+            selected_stats.append("")
+        
+        # GET RANDOM VALUE
+        # get min max
+        pick_value = [999.9] * 4
+        
+        if pick_riven_type == "2 Buff 0 Curse":
+            
+            base_stat = get_base_stat(selected_stats[0], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.99)
+            max = calculate_max(base_stat, weapon_dispo, 0.99)
+            pick_value[0] = round(random.uniform(min, max), 1)
+            
+            base_stat = get_base_stat(selected_stats[1], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.99)
+            max = calculate_max(base_stat, weapon_dispo, 0.99)
+            pick_value[1] = round(random.uniform(min, max), 1)
+                
+        elif pick_riven_type == "2 Buff 1 Curse":
+            
+            base_stat = get_base_stat(selected_stats[0], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 1.2375)
+            max = calculate_max(base_stat, weapon_dispo, 1.2375)
+            pick_value[0] = round(random.uniform(min, max), 1)
+            
+            base_stat = get_base_stat(selected_stats[1], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 1.2375)
+            max = calculate_max(base_stat, weapon_dispo, 1.2375)
+            pick_value[1] = round(random.uniform(min, max), 1)
+            
+            base_stat = get_base_stat(selected_stats[2], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, -0.495)
+            max = calculate_max(base_stat, weapon_dispo, -0.495)
+            pick_value[2] = round(random.uniform(min, max), 1)
+            
+        elif pick_riven_type == "3 Buff 0 Curse":
+            
+            base_stat = get_base_stat(selected_stats[0], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.75)
+            max = calculate_max(base_stat, weapon_dispo, 0.75)
+            pick_value[0] = round(random.uniform(min, max), 1)
+
+            base_stat = get_base_stat(selected_stats[1], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.75)
+            max = calculate_max(base_stat, weapon_dispo, 0.75)
+            pick_value[1] = round(random.uniform(min, max), 1)
+
+            base_stat = get_base_stat(selected_stats[2], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.75)
+            max = calculate_max(base_stat, weapon_dispo, 0.75)
+            pick_value[2] = round(random.uniform(min, max), 1)
+
+        else: # 3 Buff 1 Curse
+            
+            base_stat = get_base_stat(selected_stats[0], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.9375)
+            max = calculate_max(base_stat, weapon_dispo, 0.9375)
+            pick_value[0] = round(random.uniform(min, max), 1)
+
+            base_stat = get_base_stat(selected_stats[1], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.9375)
+            max = calculate_max(base_stat, weapon_dispo, 0.9375)
+            pick_value[1] = round(random.uniform(min, max), 1)
+
+            base_stat = get_base_stat(selected_stats[2], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, 0.9375)
+            max = calculate_max(base_stat, weapon_dispo, 0.9375)
+            pick_value[2] = round(random.uniform(min, max), 1)
+
+            base_stat = get_base_stat(selected_stats[3], weapon_type)
+            min = calculate_min(base_stat, weapon_dispo, -0.75)
+            max = calculate_max(base_stat, weapon_dispo, -0.75)
+            pick_value[3] = round(random.uniform(min, max), 1)
+        
+        print(f"## Weapon Name : {name} ##")
+        print(f"## Weapon Type : {weapon_type} ##")
+        print(f"## Weapon Variant : {weapon_variant} ##")
+        
+        # Create a task with the mock image path
+        task = GradingTask(
+            interaction=interaction,
+            weapon_variant=weapon_variant,
+            weapon_type=weapon_type,
+            riven_rank="Auto",
+            image="empty_riven_maxed.png",
+            platinum=None,
+            ocr_engine="Random",
+            buff_count = buff,
+            weapon_name = name
+        )
+        
+        extracted_text = f"18{name}{pick_value[0]}{selected_stats[0]}{pick_value[1]}{selected_stats[1]}{pick_value[2]}{selected_stats[2]}{pick_value[3]}{selected_stats[3]}"     
+        extracted_text = extracted_text.replace("999.9","")
+        extracted_text = extracted_text.replace("None","")
+        
+        # Store the manually created text
+        task.raw_extracted_text = extracted_text
+        
+        return task
+    
+    except Exception as e:
+        traceback.print_exc()
+        await interaction.followup.send(f"```{e}```")
+    
+async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: bool = False, new_random: bool = False, first_random: bool = False):
     async with grading_semaphore:  # This limits concurrent executions
         
-        if is_edit == False:    
-            print("\n" + "=" * 34)
-            print("|        STARTING GRADING        |")
-            print("=" * 34 + "\n")
-        else:
-            print("\n" + "=" * 34)
-            print("|       STARTING REGRADING       |")
-            print("=" * 34 + "\n")
+        print("\n" + "=" * 26)
+        print("|        STARTING        |")
+        print("=" * 26 + "\n")
+        
+        # if is_edit == False:    
+            # print("\n" + "=" * 34)
+            # print("|        STARTING GRADING        |")
+            # print("=" * 34 + "\n")
+        # elif is_reroll == True:
+            # print("\n" + "=" * 34)
+            # print("|        REROLLING        |")
+            # print("=" * 34 + "\n")
+        # else:
+            # print("\n" + "=" * 34)
+            # print("|       STARTING REGRADING       |")
+            # print("=" * 34 + "\n")
 
         try:  
             # Skip image processing for manual grading
-            if task.ocr_engine != "Manual":
+            if task.ocr_engine == "OCR Space":
                 output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
                 await convert_image_to_jpg(task.image, output_riven)
             else:
@@ -2327,7 +2884,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             # return
     
             # Check if the text represents a Riven Mod (skip for manual)
-            if task.ocr_engine != "Manual" and is_riven(extracted_text) == False:
+            if task.ocr_engine == "OCR Space" and is_riven(extracted_text) == False:
                 await task.interaction.followup.send("Please upload an image containing only one visible Riven Mod. Do not include any extra text, only the Riven Mod itself.", file=discord.File(output_riven))  # Use followup
                 print(f"is_riven extracted_text : {extracted_text}")
                 return
@@ -2368,13 +2925,12 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
     
             # Create an instance of RivenStatDetails
             riven_stat_details = RivenStatDetails()
-    
+            
             # Get weapon name and type on riven mod. Also riven rank if possible
-            weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank)
+            weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank, task.weapon_variant)
             print(f"weapon_name : {weapon_name}")
-            print(f"weapon_type : {task.weapon_type}")
             if weapon_name_found == False:
-                if task.ocr_engine != "Manual":
+                if task.ocr_engine == "OCR Space":
                     await task.interaction.followup.send(
                         f"**Weapon name not found!**\n"
                         f"▶ Ensure all Riven Mod details are fully visible and not obscured.\n"
@@ -2389,9 +2945,9 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     return
             
             # For Kitguns, set weapon type based on selected variant
-            if is_kitgun(weapon_name):
-                if is_edit == False:
-                    task.weapon_variant = "Secondary"
+            if is_kitgun(weapon_name) and task.weapon_type not in ["Primary","Secondary"]:
+                # if is_edit == False:
+                    # task.weapon_variant = "Secondary"
                 
                 if task.weapon_variant == "Primary":
                     if weapon_name == "Catchmoon":
@@ -2400,8 +2956,16 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                         task.weapon_type = "Shotgun"
                     else:
                         task.weapon_type = "Rifle"
-                else:  # Secondary
-                    task.weapon_type = "Pistol"
+                elif task.weapon_variant == "Secondary":  # Secondary
+                    task.weapon_type = "Pistols"
+            
+            if is_kitgun(weapon_name) and is_edit == False and first_random == False and is_reroll == False and new_random == False:
+                task.weapon_variant = "Secondary"
+                
+            # if is_kitgun(weapon_name) and task.weapon_type not in ["Primary","Secondary"] and is_edit == False:
+                # task.weapon_variant = "Secondary"
+                
+            print(f"weapon_type : {task.weapon_type}")
             
             if task.weapon_type == "Kitgun":
                 await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Kitguns are currently not supported for grading—this is temporary.")  # Use followup
@@ -2427,7 +2991,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     column_positive = 'B'
                     column_negative = 'F'
                     column_notes = 'I'
-                elif task.weapon_type == "Pistol":
+                elif task.weapon_type == "Pistols":
                     df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
                     column_positive = 'B'
                     column_negative = 'F'
@@ -2450,12 +3014,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
             negative_stats = ""
             notes = ""
             found = False
+            base_name = get_base_weapon_name(weapon_name)
             try:
                 # Loop through each row
                 for index, row in df.iterrows():
                     roww, coll = excel_to_pandas(index + 1, 'A')
                     temp_name = df.iloc[roww, coll]
-                    if temp_name.lower() in weapon_name.lower():
+                    if temp_name.lower() in base_name.lower():
                         roww, coll = excel_to_pandas(index + 1, column_positive)
                         positive_stats = df.iloc[roww, coll]
                         roww, coll = excel_to_pandas(index + 1, column_negative)
@@ -2473,13 +3038,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 notes = ""
         
             if found:
-                add_text = f"**Recommended rolls for {weapon_name}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+                add_text = f"**Recommended rolls for {temp_name.title()}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
             else:
                 add_text = f""
-    
+            
             # Count buff stat
             extracted_text = extracted_text.lower()
-            if task.ocr_engine != "Manual":
+            if task.ocr_engine == "OCR Space":
                 buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
                 riven_stat_details.BuffCount = buff_count
             else:
@@ -2503,7 +3068,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 print(f"Error: {e}")
                 await task.interaction.followup.send(f"Error! Failed to retrieve the value and stat name. This may be due to the image being too low in resolution or something obscuring the text. Please retake the screenshot and try again.")  # Use followup
                 return
-        
+            
             riven_stat_details.StatCount = get_stat_count(riven_stat_details)
             riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
             get_riven_type(riven_stat_details)
@@ -2523,14 +3088,83 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 # if riven_stat_details.Value[i] > 260 and weapon_dispo < 1 and riven_stat_details.StatName[i] == "Electricity":
                     # riven_stat_details.Value[i] -= 104
                     # print(f"value correction trigger!")
-    
+
             # Damage to Faction value correction - convert to percentage
             for i in range(riven_stat_details.StatCount):
-                damage_to_faction_fix(riven_stat_details, i)
-                
+                # Only process if value is not percentage
+                if "Damage to" in riven_stat_details.StatName[i] and riven_stat_details.Value[i] < 3:
+                    damage_to_faction_fix(riven_stat_details, i)
+
             # print(f"riven_stat_details value : {riven_stat_details.Value}")
             # print(f"riven_stat_details stat name : {riven_stat_details.StatName}")
             
+            # Define the mapping of Full Name -> Shortform
+            stat_map = {
+                "Attack Speed": ["AS"], 
+                "Cold": ["COLD", "ELEMENT"], 
+                "Critical Chance": ["CC"],
+                "Critical Chance for Slide Attack": ["SLIDE"], 
+                "Critical Damage": ["CD"],
+                "Damage": ["DMG"], 
+                "Melee Damage": ["DMG"], 
+                "Damage to Corpus": ["DTC"],
+                "Damage to Grineer": ["DTG"], 
+                "Damage to Infested": ["DTI"],
+                "Electricity": ["ELEC", "ELEMENT"], 
+                "Finisher Damage": ["FIN"], 
+                "Fire Rate": ["FR"],
+                "Heat": ["HEAT", "ELEMENT"], 
+                "Heavy Attack Efficiency": ["EFF"], 
+                "Impact": ["IMP"],
+                "Initial Combo": ["IC"], 
+                "Magazine Capacity": ["MAG"], 
+                "Multishot": ["MS"],
+                "Projectile Speed": ["PFS"], 
+                "Punch Through": ["PT"], 
+                "Puncture": ["PUNC"],
+                "Range": ["RANGE"], 
+                "Reload Speed": ["RLS"], 
+                "Slash": ["SLASH"],
+                "Status Chance": ["SC"], 
+                "Status Duration": ["SD"], 
+                "Toxin": ["TOX", "ELEMENT"],
+                "Weapon Recoil": ["REC"], 
+                "Zoom": ["ZOOM"]
+            }
+
+            # Highlight Stats logic
+            for i in range(riven_stat_details.StatCount):
+                current_stat = riven_stat_details.StatName[i]
+    
+                # Get the shortform from our map (returns None if not found)
+                shortforms = stat_map.get(current_stat)
+                
+                if not shortforms:
+                    continue
+                
+                for code in shortforms:
+                    # Check if the shortform exists in either positive or negative lists
+                    if code in positive_stats:
+                        riven_stat_details.Highlight[i] = "Good"
+                        if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
+                            riven_stat_details.Highlight[i] = "Bad"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
+                            riven_stat_details.Highlight[i] = "Bad"
+                        
+                    # Highligh for curse
+                    if code in negative_stats:
+                        if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
+                            riven_stat_details.Highlight[i] = "Good"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
+                            riven_stat_details.Highlight[i] = "Good"
+                            
+                    # Default red highlight for curse
+                    elif code in ["DMG","CC","CD","MS","SC"]:
+                        if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
+                            riven_stat_details.Highlight[i] = "Bad"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
+                            riven_stat_details.Highlight[i] = "Bad"
+                            
             # Get Min Max
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
             
@@ -2555,11 +3189,11 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
     
             # Set Grade
             set_grade_new(riven_stat_details, task.weapon_type, weapon_dispo, task.riven_rank)
-    
+
             # Damage to Faction value correction - percentage_to_decimal
             for i in range(riven_stat_details.StatCount):
                 percentage_to_decimal(riven_stat_details, i)
-    
+
             # print(f"All value : {riven_stat_details.Value}\nAll Min : {riven_stat_details.Min}\nAll Max : {riven_stat_details.Max}")
             # return
             # Create image grading
@@ -2594,7 +3228,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     add_text_2 = ""
                 title_text = "GRADING FAILED ❌"
                 
-                if task.ocr_engine != "Manual":
+                if task.ocr_engine == "OCR Space":
                     description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
                 else:
                     description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If it still fails, it may be due to an incorrect input or because the Riven you are referring to is outdated."
@@ -2606,10 +3240,23 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 title_text = "GRADING SUCCESS ✅️"
                 description_text = f"{task.interaction.user.mention}\n{add_text}"
             
+            if task.ocr_engine == "Random" and task.reroll_counter > 0:
+                title_text = "RANDOM GRADING 🔀"
+                display_counter_cost = f"**Reroll Counter** : {task.reroll_counter}\n**Kuva Cost** : {task.kuva_cost}\n"
+                description_text = f"{task.interaction.user.mention}\n{display_counter_cost}\n{add_text}"
+            elif task.ocr_engine == "Random" and task.reroll_counter == 0:
+                title_text = "RANDOM GRADING 🔀"
+                description_text = f"{task.interaction.user.mention}\n{add_text}"
+            
             embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
             # Add a footer to the embed
-            embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
-            
+            if task.ocr_engine == "OCR Space": 
+                embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
+            elif task.ocr_engine == "Manual": 
+                embed.set_footer(text=f"Tips: Use a maxed-rank Riven mod for optimal grading!")
+            elif task.ocr_engine == "Random": 
+                embed.set_footer(text=f"Note: Random grading always results in maxed-rank Riven mods!")
+                
             # Make sure value stat for no stat name is 999.9
             for i in range(4):
                 if riven_stat_details.StatName[i] == "":
@@ -2627,7 +3274,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 task.ocr_engine
             )
             # Return the path if this is an edit operation
-            if is_edit:
+            if is_edit or is_reroll or new_random:
                 return output_path, embed
             
             # Create and send the view with the original message reference
@@ -2639,7 +3286,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                 )
                 
             # Edit the message to add the view after it's created
-            if len(variants) > 1:  # More than just the base variant
+            if len(variants) > 1 and task.ocr_engine != "Random":  # More than just the base variant and not random command
                 # Create and add the view
                 view = RegradeView(
                     original_message=message,
@@ -2659,7 +3306,19 @@ async def process_grading(task: GradingTask, is_edit: bool = False):
                     option.default = (option.value == task.weapon_variant)
             
                 await message.edit(view=view)
-            
+                
+            if task.ocr_engine == "Random":
+                view = RerollView(
+                    original_message=message,
+                    weapon_name=weapon_name,
+                    weapon_type=task.weapon_type,
+                    weapon_variant=task.weapon_variant,
+                    original_user=task.interaction.user,
+                    reroll_counter=task.reroll_counter,
+                    kuva_cost=task.kuva_cost
+                )
+                await message.edit(view=view)
+                
             print("\n" + "=" * 34)
             print("|         GRADING COMPLETE       |")
             print("=" * 34 + "\n")
@@ -2737,6 +3396,13 @@ async def crop_riven(interaction: discord.Interaction, image: discord.Attachment
 
     except Exception as e:
         await interaction.followup.send(f"Error processing image: {e}")
+
+async def weapon_autocomplete(interaction, current: str):
+    results = [
+        app_commands.Choice(name=w["name"], value=w["name"])
+        for w in all_weapon_name if current.lower() in w["name"].lower()
+    ]
+    return results[:25]  # show up to 25 filtered matches
     
 @tree.command(name="legend", description="Legend/Key")
 async def status(interaction: discord.Interaction):
@@ -2772,6 +3438,22 @@ TOX   : Toxin
 async def status(interaction: discord.Interaction):
     _, embed = await check_ocr_space_api()  # Unpack the tuple
     await interaction.response.send_message(embed=embed)
+
+@tree.command(name="random", description="Grading a Random Riven Mod")
+@app_commands.autocomplete(weapon_name=weapon_autocomplete)
+async def random_grading(interaction: discord.Interaction, weapon_name:str = None):
+    global file_path
+    
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        task = await random_reroll(interaction, weapon_name)
+        
+        await process_grading(task, first_random = True)
+        
+    except Exception as e:
+        traceback.print_exc()
+        await interaction.followup.send(f"Failed to grading random Riven mod. Try again later.\n```{e}```")
 
 @tree.command(name="grading", description="Grading a Riven mod.")
 @app_commands.choices(
@@ -2891,6 +3573,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
             print(f"Failed to send error: {send_error}")
 
 @tree.command(name="m_grading", description="Manual grading for a Riven mod.")
+@app_commands.autocomplete(weapon_name=weapon_autocomplete)
 @app_commands.choices(
     riven_rank=[
         app_commands.Choice(name="Maxed", value="Maxed"),
@@ -2974,13 +3657,13 @@ async def m_grading(
 # all_weapon_data = load_weapon_data(file_path)
 # all_weapon_name = [weapon["name"] for weapon in all_weapon_data["ExportWeapons"]]
 
-@m_grading.autocomplete("weapon_name")
-async def weapon_autocomplete(interaction, current: str):
-    results = [
-        app_commands.Choice(name=w, value=w)
-        for w in all_weapon_name if current.lower() in w.lower()
-    ]
-    return results[:25]  # show up to 25 filtered matches
+# @m_grading.autocomplete("weapon_name")
+# async def weapon_autocomplete(interaction, current: str):
+    # results = [
+        # app_commands.Choice(name=w["name"], value=w["name"])
+        # for w in all_weapon_name if current.lower() in w["name"].lower()
+    # ]
+    # return results[:25]  # show up to 25 filtered matches
 
 @client.event
 async def on_ready():
@@ -3005,19 +3688,44 @@ async def on_ready():
         # Update the weapon name list for autocomplete
         global all_weapon_name
         all_weapon_data = load_weapon_data(file_path)
-        all_weapons = [
-            weapon["name"]
-            for weapon in all_weapon_data["ExportWeapons"]
-            if "<ARCHWING>" not in weapon["name"]
-            and not any(x in weapon["uniqueName"] for x in ["PetPart", "Powersuits", "Vehicles", "Items", "OperatorAmplifiers", "ModularMelee01/Balance", "ModularMelee01/Handle", "ModularMelee02/Handle", "ModularMeleeInfested/Handles"])
-        ]
-        # Use your existing function to get base names and remove duplicates
-        all_weapon_name = list(set([get_base_weapon_name(name) for name in all_weapons]))
         
-        # Manually add weapon name
-        all_weapon_name.append("Vinquibus (melee)")
+        # 1. Capture both Name and Category in a temporary list
+        raw_weapons = []
+        for weapon in all_weapon_data["ExportWeapons"]:
+            name = weapon.get("name", "")
+            unique_name = weapon.get("uniqueName", "")
+            category = weapon.get("productCategory", "HahNoTYPE?") # Default if missing
+
+            # Your existing filter logic
+            if "<ARCHWING>" in name:
+                continue
+            
+            exclude_keywords = [
+                "PetPart", "Powersuits", "Vehicles", "Items", "NechroTech",
+                "OperatorAmplifiers", "ModularMelee01/Balance",
+                "ModularMeleeInfested/Handles", "Clip", "Handle", "DrifterPistol"
+            ]
+            if any(x in unique_name for x in exclude_keywords):
+                continue
+            
+            # Get the base name (e.g., "Braton Prime" -> "Braton")
+            base_name = get_base_weapon_name(name)
+            raw_weapons.append({"name": base_name, "category": category})
+
+        # 2. Remove duplicates by name while keeping the category
+        # Using a dict comprehension to keep only the first instance of each base name
+        seen = {}
+        for w in raw_weapons:
+            if w["name"] not in seen:
+                seen[w["name"]] = w["category"]
         
-        print(f"Loaded {len(all_weapon_name)} weapon names for autocomplete.")
+        # Convert back to a list of dictionaries
+        all_weapon_name = [{"name": name, "category": cat} for name, cat in seen.items()]
+        
+        # 3. Manually add special weapons
+        all_weapon_name.append({"name": "Vinquibus (melee)", "category": "Melee"})
+        
+        print(f"Loaded {len(all_weapon_name)} weapon names with categories.")
         
     except Exception as e:
         print(f"Failed to load weapon data on startup: {e}")
