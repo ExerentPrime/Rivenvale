@@ -1020,6 +1020,39 @@ def special_case_fix(extracted_text):
     else:
         return ""
 
+def get_dmgPerShot(name):
+    
+    all_damage = []
+    # Fix damage per shot value
+    # Zaw
+    if is_zaw(name):
+        if name == "Kronsh":
+            all_damage = [1,0,1]
+        else:
+            all_damage = [1,1,1]
+    elif name == "Kronsh":
+        all_damage = [1,0,1]
+    elif name == "Catchmoon" or name == "Sporelacer":
+        all_damage = [1,0,0]
+    elif name == "Gaze" and weapon_variant == "Secondary":
+        all_damage = [0,1,0]
+    elif name == "Rattleguts" or name == "Vermisplicer":
+        all_damage = [1,1,1]
+    elif name == "Tombfinger" and weapon_variant == "Secondary":
+        all_damage = [1,1,0]
+    elif name == "Tombfinger" and weapon_variant == "Primary":
+        all_damage = [1,0,0]
+    # Others
+    else:
+        data = load_weapon_data(file_path)
+        for weapon in data.get("ExportWeapons", []):
+            temp_name = weapon['name']
+            if temp_name == name:
+                all_damage = weapon['damagePerShot']
+                break
+    
+    return all_damage
+
 def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven_rank:str, weapon_variant:str):
     weapon_name = ""
     weapon_name_found = False
@@ -1055,7 +1088,6 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
     
     for weapon in data.get("ExportWeapons", []):
         temp_name = weapon['name']
-        
         # variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
         # if weapon_variant in variants:
             # if weapon_variant not in temp_name:
@@ -1918,6 +1950,70 @@ def damage_to_faction_fix(riven_stat_details, i):
         else:
             riven_stat_details.Value[i] = (1 - riven_stat_details.Value[i]) * 100
 
+def get_recommended_stats(weapon_name:str, weapon_type:str):
+    column_positive = ''
+    column_negative = ''
+    column_notes = ''
+    # Load the Excel file
+    if get_type_sentinel_weapon(weapon_name) != "Error":
+        df = pd.read_excel("roll_data.xlsx", sheet_name="robotic")  # Load sheet
+        column_positive = 'B'
+        column_negative = 'E'
+        column_notes = 'G'
+    elif is_kitgun(weapon_name):
+        df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
+        column_positive = 'B'
+        column_negative = 'F'
+        column_notes = 'I'
+    else:
+        if weapon_type == "Rifle" or weapon_type == "Shotgun":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="primary")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'F'
+            column_notes = 'I'
+        elif weapon_type == "Pistols":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'F'
+            column_notes = 'I'
+        elif weapon_type == "Melee":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="melee")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'G'
+            column_notes = 'J'
+        elif weapon_type == "Archgun":
+            df = pd.read_excel("roll_data.xlsx", sheet_name="archgun")  # Load sheet
+            column_positive = 'B'
+            column_negative = 'H'
+            column_notes = 'J'
+        else:
+            print("Failed to load roll_data.xlsx")
+    # print(df.head())
+    # return
+    positive_stats = ""
+    negative_stats = ""
+    notes = ""
+    found = False
+    base_name = get_base_weapon_name(weapon_name)
+    try:
+        # Loop through each row
+        for index, row in df.iterrows():
+            roww, coll = excel_to_pandas(index + 1, 'A')
+            temp_name = df.iloc[roww, coll]
+            if temp_name.lower() in base_name.lower():
+                roww, coll = excel_to_pandas(index + 1, column_positive)
+                positive_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_negative)
+                negative_stats = df.iloc[roww, coll]
+                roww, coll = excel_to_pandas(index + 1, column_notes)
+                notes = df.iloc[roww, coll]
+                found = True
+                return found, positive_stats, negative_stats, notes, base_name
+                break
+    except Exception as e:
+        print(f"Error: {e}")
+        return found, positive_stats, negative_stats, notes, base_name
+
 def get_grade_new(normalize, riven_stat_details, i):
     if -11.5 < normalize <= -9.5:
         return "F"
@@ -2167,6 +2263,8 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
                 background.paste(stat_grad, position, mask)
             elif riven_stat_details.Highlight[i] == "Bad":
                 draw.text(position, statname_text, fill=(255, 75, 75), font=default_font)
+            elif riven_stat_details.Highlight[i] == "Wasted":
+                draw.text(position, statname_text, fill=(128, 128, 128), font=default_font)
             else:
                 draw.text(position, statname_text, fill="white", font=default_font)
         i += 1
@@ -2188,12 +2286,18 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         {"min": combine_stat_3, "position": (354, 201)},
         {"min": combine_stat_4, "position": (354, 269)},
     ]
+    
+    i = 0
     for min_data in min_stats:
         min_text = min_data["min"]
         position = min_data["position"]
         if "999.9" not in min_text:
-            draw.text(position, min_text, fill="white", font=default_font)
-
+            if riven_stat_details.Highlight[i] == "Wasted":
+                draw.text(position, min_text, fill=(128, 128, 128), font=default_font)
+            else:
+                draw.text(position, min_text, fill="white", font=default_font)
+        i+=1
+        
     # Draw max stats
     # Round to 1 decimal place
     for i in range(riven_stat_details.StatCount):
@@ -2211,6 +2315,8 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         {"max": combine_stat_3, "position": (520, 201)},
         {"max": combine_stat_4, "position": (520, 269)},
     ]
+    
+    i = 0
     for max_data in max_stats:
         max_text = max_data["max"]
         y_position = max_data["position"][1]
@@ -2219,8 +2325,12 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         text_width = text_bbox[2] - text_bbox[0]
         x_position = right_boundary - text_width
         if "999.9" not in max_text:
-            draw.text((x_position, y_position), max_text, fill="white", font=default_font)
-    
+            if riven_stat_details.Highlight[i] == "Wasted":
+                draw.text((x_position, y_position), max_text, fill=(128, 128, 128), font=default_font)
+            else:
+                draw.text((x_position, y_position), max_text, fill="white", font=default_font)
+        i+=1
+        
     # Recreate riven mod - For manual grading only
     if ocr_engine != "OCR Space":
         weapon_name_font_size = 14
@@ -2639,20 +2749,20 @@ async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_va
             
         # Check IPS
         all_damage = []
-        data = load_weapon_data(file_path)
-        for weapon in data.get("ExportWeapons", []):
-            temp_name = weapon['name']
-            if temp_name == name:
-                all_damage = weapon['damagePerShot']
-                break
+                
+        all_damage = get_dmgPerShot(name)
         
-        if all_damage[0] == 0:
+        print(f"All damage type : {all_damage}")
+        
+        ff, pp, negative_stats, nn, bb = get_recommended_stats(name, weapon_type)
+        
+        if all_damage[0] == 0 and "IMP" not in negative_stats:
             pool.remove("Impact")
             print(f"Impact has been removed from pool")
-        if all_damage[1] == 0:
+        if all_damage[1] == 0 and "PUNC" not in negative_stats:
             pool.remove("Puncture")
             print(f"Puncture has been removed from pool")
-        if all_damage[2] == 0:
+        if all_damage[2] == 0 and "SLASH" not in negative_stats:
             pool.remove("Slash")
             print(f"Slash has been removed from pool")
             
@@ -2977,75 +3087,18 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             if task.weapon_type == "Kitgun":
                 await task.interaction.followup.send(f"{weapon_name} is a Kitgun weapon. Kitguns are currently not supported for grading—this is temporary.")  # Use followup
                 return
-    
-            column_positive = ''
-            column_negative = ''
-            column_notes = ''
-            # Load the Excel file
-            if get_type_sentinel_weapon(weapon_name) != "Error":
-                df = pd.read_excel("roll_data.xlsx", sheet_name="robotic")  # Load sheet
-                column_positive = 'B'
-                column_negative = 'E'
-                column_notes = 'G'
-            elif is_kitgun(weapon_name):
-                df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
-                column_positive = 'B'
-                column_negative = 'F'
-                column_notes = 'I'
-            else:
-                if task.weapon_type == "Rifle" or task.weapon_type == "Shotgun":
-                    df = pd.read_excel("roll_data.xlsx", sheet_name="primary")  # Load sheet
-                    column_positive = 'B'
-                    column_negative = 'F'
-                    column_notes = 'I'
-                elif task.weapon_type == "Pistols":
-                    df = pd.read_excel("roll_data.xlsx", sheet_name="secondary")  # Load sheet
-                    column_positive = 'B'
-                    column_negative = 'F'
-                    column_notes = 'I'
-                elif task.weapon_type == "Melee":
-                    df = pd.read_excel("roll_data.xlsx", sheet_name="melee")  # Load sheet
-                    column_positive = 'B'
-                    column_negative = 'G'
-                    column_notes = 'J'
-                elif task.weapon_type == "Archgun":
-                    df = pd.read_excel("roll_data.xlsx", sheet_name="archgun")  # Load sheet
-                    column_positive = 'B'
-                    column_negative = 'H'
-                    column_notes = 'J'
-                else:
-                    print("Failed to load roll_data.xlsx")
-            # print(df.head())
-            # return
-            positive_stats = ""
-            negative_stats = ""
-            notes = ""
-            found = False
-            base_name = get_base_weapon_name(weapon_name)
-            try:
-                # Loop through each row
-                for index, row in df.iterrows():
-                    roww, coll = excel_to_pandas(index + 1, 'A')
-                    temp_name = df.iloc[roww, coll]
-                    if temp_name.lower() in base_name.lower():
-                        roww, coll = excel_to_pandas(index + 1, column_positive)
-                        positive_stats = df.iloc[roww, coll]
-                        roww, coll = excel_to_pandas(index + 1, column_negative)
-                        negative_stats = df.iloc[roww, coll]
-                        roww, coll = excel_to_pandas(index + 1, column_notes)
-                        notes = df.iloc[roww, coll]
-                        found = True
-                        break
-            except Exception as e:
-                print(f"Error: {e}")
+
+            found, positive_stats, negative_stats, notes, base_name = get_recommended_stats(weapon_name, task.weapon_type)
+            
+            if not found:
                 await task.interaction.followup.send(f"Error! You may have selected the wrong weapon type. Please double check and try again.")  # Use followup
                 return
-        
+            
             if pd.isna(notes):
                 notes = ""
-        
+            
             if found:
-                add_text = f"**Recommended rolls for {temp_name.title()}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+                add_text = f"**Recommended rolls for {base_name.title()}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
             else:
                 add_text = f""
             
@@ -3138,8 +3191,19 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 "Weapon Recoil": ["REC"], 
                 "Zoom": ["ZOOM"]
             }
-
+            
             # Highlight Stats logic
+            dmgPerShot = get_dmgPerShot(weapon_name)
+            has_impact = True
+            has_puncture = True
+            has_slash = True
+            if dmgPerShot[0] == 0:
+                has_impact = False
+            if dmgPerShot[1] == 0:
+                has_puncture = False
+            if dmgPerShot[2] == 0:
+                has_slash = False
+                
             for i in range(riven_stat_details.StatCount):
                 current_stat = riven_stat_details.StatName[i]
     
@@ -3159,7 +3223,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                             riven_stat_details.Highlight[i] = "Bad"
                         
                     # Highligh for curse
-                    if code in negative_stats:
+                    elif code in negative_stats:
                         if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
                             riven_stat_details.Highlight[i] = "Good"
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
@@ -3172,6 +3236,28 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
                             riven_stat_details.Highlight[i] = "Bad"
                             
+                    # Highligh for dead stats
+                    if code == "IMP" and has_impact == False and "IMP" in negative_stats:
+                        if riven_stat_details.RivenType in ["2 Buff 0 Curse","3 Buff 0 Curse"]:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "2 Buff 1 Curse" and i != 2:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i != 3:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                    elif code == "PUNC" and has_puncture == False and "PUNC" in negative_stats:
+                        if riven_stat_details.RivenType in ["2 Buff 0 Curse","3 Buff 0 Curse"]:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "2 Buff 1 Curse" and i != 2:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i != 3:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                    elif code == "SLASH" and has_slash == False and "SLASH" in negative_stats:
+                        if riven_stat_details.RivenType in ["2 Buff 0 Curse","3 Buff 0 Curse"]:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "2 Buff 1 Curse" and i != 2:
+                            riven_stat_details.Highlight[i] = "Wasted"
+                        elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i != 3:
+                            riven_stat_details.Highlight[i] = "Wasted"
             # Get Min Max
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
             
@@ -3208,25 +3294,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             # Check if out if range
             out_range, out_range_faction = check_out_range(riven_stat_details)
-            # print("!!!!!!!!!!!!!!!!!!!")
-            # print(f"weapon_name BEFORE GET BASE NAME : {weapon_name}")
-            # print("!!!!!!!!!!!!!!!!!!!")
-            base_name = get_base_weapon_name(weapon_name)
-            # print("!!!!!!!!!!!!!!!!!!!")
-            # print(f"bese_name : {weapon_name}")
-            # print("!!!!!!!!!!!!!!!!!!!")
+           
             variants = get_available_variants(file_path, base_name)
-            # print("!!!!!!!!!!!!!!!!!!!")
-            # print(f"variant available : {variants}")
-            # print("!!!!!!!!!!!!!!!!!!!")
-            # if out_range == True and len(variants) > 1:
-                # add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147) to learn how to identify a Riven’s variant.\n"
-            # else:
-                # add_text_2 = ""
-            # print(f"Variant RANGE : {len(variants)} ::::: {variants}")    
-            # print(f"MIN : {riven_stat_details.Min}")
-            # print(f"MAX : {riven_stat_details.Max}")
-            # print(f"Stat Count : {riven_stat_details.StatCount}")
             
             if out_range == True:
                 if len(variants) > 1:
@@ -3262,7 +3331,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             elif task.ocr_engine == "Manual": 
                 embed.set_footer(text=f"Tips: Use a maxed-rank Riven mod for optimal grading!")
             elif task.ocr_engine == "Random": 
-                embed.set_footer(text=f"Note: Random grading always results in maxed-rank Riven mods!")
+                embed.set_footer(text=f"Note: Random grading always results in maxed-rank!")
                 
             # Make sure value stat for no stat name is 999.9
             for i in range(4):
