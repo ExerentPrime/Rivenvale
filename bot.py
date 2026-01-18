@@ -90,7 +90,7 @@ class RerollView(discord.ui.View):
         if new_image_path:
             with open(new_image_path, 'rb') as f:
                 file = discord.File(f)
-                await self.original_message.edit(
+                await interaction.edit_original_response(
                     attachments=[file],
                     embed=new_embed,
                     view=self
@@ -176,11 +176,18 @@ class RerollView(discord.ui.View):
         if new_image_path:
             with open(new_image_path, 'rb') as f:
                 file = discord.File(f)
-                await self.original_message.edit(
+                await interaction.edit_original_response(
                     attachments=[file],
                     embed=new_embed,
                     view=self
                 )
+                
+                # Via Webhook token - 15 Minutes
+                # await self.original_message.edit(
+                    # attachments=[file],
+                    # embed=new_embed,
+                    # view=self
+                # )
         
         print("\n" + "=" * 31)
         print("|       REROLL COMPLETE       |")
@@ -302,7 +309,7 @@ class RegradeView(discord.ui.View):
             
             with open(new_image_path, 'rb') as f:
                 file = discord.File(f)
-                await self.original_message.edit(
+                await interaction.edit_original_response(
                     attachments=[file],
                     embed=new_embed,
                     view=self
