@@ -1020,7 +1020,7 @@ def special_case_fix(extracted_text):
     else:
         return ""
 
-def get_dmgPerShot(name):
+def get_dmgPerShot(name, weapon_variant):
     
     all_damage = []
     # Fix damage per shot value
@@ -2593,6 +2593,7 @@ async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_va
                 if w["name"] == name:
                     name = w["name"]
                     category = w["category"]
+                    break
         else:
             random_weapon = random.choice(all_weapon_name)
             name = random_weapon["name"]
@@ -2750,7 +2751,7 @@ async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_va
         # Check IPS
         all_damage = []
                 
-        all_damage = get_dmgPerShot(name)
+        all_damage = get_dmgPerShot(name, weapon_variant)
         
         print(f"All damage type : {all_damage}")
         
@@ -3193,7 +3194,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             }
             
             # Highlight Stats logic
-            dmgPerShot = get_dmgPerShot(weapon_name)
+            dmgPerShot = get_dmgPerShot(weapon_name, task.weapon_variant)
             has_impact = True
             has_puncture = True
             has_slash = True
