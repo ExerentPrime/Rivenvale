@@ -3055,7 +3055,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                         f"▶ If using a phone camera, avoid taking photos too close to the screen. Visible pixels or '[moire patterns](<https://www.google.com/search?q=what+is+moire+patterns>)' can interfere with detection.\n\n"
                         f"**Detected Text:**\n`{extracted_text}`", 
                         file=discord.File(output_riven)
-)                    # os.remove(output_riven)
+                    )
+                    # os.remove(output_riven)
                     return
                 else:
                     await task.interaction.followup.send(f"Weapon name not found! Please make sure to select the weapon name from the autocomplete suggestions.\n{extracted_text}")  # Use followup
