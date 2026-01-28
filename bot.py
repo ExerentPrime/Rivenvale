@@ -572,6 +572,7 @@ async def get_ocr_result(filename):
     # 1. Try EasyOCR (Local)
     # print("Attempting Priority 1: EasyOCR...")
     # text = await easyOCR(filename)
+    # print(f"RAW EasyOCR result :\n{text}")
     # if text and len(text.strip()) > 5: # Basic check if it found something useful
         # return text, "EasyOCR"
     # return "", "None"
@@ -579,17 +580,34 @@ async def get_ocr_result(filename):
     # print("Priority 1 failed/empty. Attempting Priority 2: OCR Space...")
     print("Attempting OCR Space...")
     text = await ocr_space_file(filename)
+    print(f"RAW OCR Space result :\n{text}")
     if text and text != "failed" and len(text.strip()) > 5:
-        return text, "OCR Space"
+        if non_english_detector(text):
+            print(f"Non-english detected!")
+        else:
+            return text, "OCR Space"
+            
+    # if len(text.strip()) < 5:
+        # return "", "None"
     
     # 3. Try Gemini (AI)
     # print("Priority 2 failed/empty. Attempting Priority 3: Gemini...")
+    counter = 0
     print("Attempting Gemini...")
-    text = await gemini_api(filename)
-    if text and "ERROR" not in text:
-        return text, "Gemini"
-    
-    # return "Limit Reached", "None"
+    while True:
+        text = await gemini_api(filename)
+        print(f"RAW Gemini result :\n{text}")
+        if "ERROR" in text:
+            counter+=1
+            if counter == 4:
+                # return "Limit Reached", "Gemini"
+                return "failed", "None"
+            print(f"{counter} , retrying....")
+            await asyncio.sleep(5) 
+            
+        if text and "ERROR" not in text:
+            return text, "Gemini"
+      
     return "failed", "None"
 
 async def easyOCR(filename):
@@ -648,37 +666,33 @@ async def gemini_api(filename):
         
         # 3. Define the Prompt and Output Instruction
         prompt_text = f"""
-        # CRITICAL INSTRUCTION:
-        
-        1. **Translation & Identification:** Analyze the Riven Mod image. If any Riven-related text (especially the weapon name) is not in English, first translate it to English. Then, determine the official, canonical Warframe weapon name corresponding to the translated text. (e.g., "冷冻光束步枪" -> "Cryo Beam Rifle" -> Official Weapon: Glaxion).
-        2. **Weapon Name Verification:** Search for the determined weapon name on the official Warframe Wiki (https://wiki.warframe.com/). If the name exists but differs slightly from the translated name (e.g., if the image says "War Broken" but the wiki uses "Broken War"), replace the weapon name with the official Wiki title.
-        3. **Canonical Stat Conversion:** Convert the extracted English stat names to one of the following official canonical names. You **MUST** use a name from this list. If the extracted name is a variation (e.g., "Critical Hit Multiplier"), use the standard name (e.g., "Critical Damage").
-        4. **Special Case:** If only "Vinquibus (Melee)" exist in the image, always set the weapon name to "Vinquibusmelee" instead of "Vinquibus".
+        # SYSTEM ROLE:
+        You are a Warframe Riven Mod data extractor. Your goal is to convert image text into a single standardized string.
+
+        CRITICAL INSTRUCTION:
+        1. Analyze the Riven Mod image.
+        2. Extract the Weapon Name (it may be in Chinese or another language).
+        3. **MANDATORY LOOKUP:** Search for the extracted name in the attached 'weapon_data.txt' content. 
+        4. Replace the extracted name with the English name found in the file.
+        5. If the name is not in the file, translate it accurately to the official Warframe English name.
+        6. **Canonical Stat Conversion:** Convert extracted stat names to the list below. If a name is a variation (e.g., "Critical Hit Multiplier"), use the standard name (e.g., "Critical Damage").
+        7. **Special Cases:** - If "Vinquibus (Melee)" is identified, set the weapon name to "Vinquibusmelee".
+
         **CANONICAL STAT LIST (You MUST use a name from this list for every stat):**
         {", ".join(all_stat_name)}
-        
-        Analyze the Warframe Riven Mod image.
-        
-        Extract the following data points:
-        1. **Riven Rank** (e.g., 10, 18)
-        2. **Weapon Name** (e.g., Cedo)
-        3. **Riven Naming** (The words near the weapon name, e.g., Crata-satitis)
-        4. **Stat 1 Value and Name** (e.g., 149.9CriticalChance)
-        5. **Stat 2 Value and Name** (e.g., 149.9CriticalChance)
-        6. **Stat 3 Value and Name** (e.g., 149.9CriticalChance)
-        7. **Stat 4 Value and Name** (e.g., 149.9CriticalChance)
-        
-        **CRITICAL OUTPUT FORMATTING INSTRUCTION:**
-        Return ONLY a single, concatenated string. Do not use spaces, or newlines.
-        The format must be:
-        <riven_rank><weapon_name><riven_naming><stat1_value><stat1_name><stat2_value><stat2_name><stat3_value><stat3_name><stat4_value><stat4_name>
 
+        Extract:
+        1. Riven Rank (e.g., 18)
+        2. Weapon Name (e.g., Tenet Envoy)
+        3. Riven Naming (e.g., Acri-saticron)
+        4. Stat 1-4 Values and Names
+
+        **CRITICAL OUTPUT FORMATTING:**
+        Return ONLY a single, concatenated string. No spaces. No newlines.
         If a stat is not present (e.g., no 3rd stat, or no 4th stat, or both), omit that part entirely.
-        
-        Example desired output:
-        18CedoCrita-satitis75.8CriticalDamage59Multishot92.3CriticalChance0.83DamagetoInfested
-        
-        Strictly adhere to this format.
+        Format: <rank><weapon_name><riven_naming><stat1_val><stat1_name><stat2_val><stat2_name>...
+
+        Example: 18TenetEnvoyAcri-saticron85.6CriticalChance54.2Multishot74.9CriticalDamage-26.7Zoom
         """
 
         # 4. Construct the Multimodal Request Parts
@@ -686,9 +700,12 @@ async def gemini_api(filename):
             data=image_bytes,
             mime_type=mime_type # Use the inferred MIME type
         )
-
+        with open('weapon_data.txt', 'r', encoding='utf-8') as f:
+            weapon_db_text = f.read()
+        # weapon_db_part = types.Part.from_text(weapon_db_text)
+        
         # contents = [image_part, types.Part.from_text(prompt_text)]
-        contents = [image_part, prompt_text]
+        contents = [f"REFERENCE WEAPON NAME:\n{weapon_db_text}", image_part, prompt_text]
 
         # 5. Call the Gemini API
         response = gemini_client.models.generate_content(
@@ -2765,15 +2782,23 @@ def check_out_range(riven_stat_details):
     return out_range, out_range_faction
 
 def non_english_detector(text: str) -> bool:
-    # 1. We define what IS allowed
-    allowed_pattern = r'[^a-zA-Z0-9\s\.\&\%\,\:\'\+\(\)\-\•\°\·\_\|\[\]\*]'
+    count = 0 
     
-    # 2. Find everything that is NOT in that allowed list.
-    found_chars = re.findall(allowed_pattern, text)
+    cyrillic = re.findall(r'[\u0400-\u04FF]', text)
+    cjk = re.findall(r'[\u3040-\u9FFF\uAC00-\uD7AF]', text)
+    european = re.findall(r'[\u00C0-\u00FF]', text)
     
-    if len(found_chars) > 2:
-        print(f"Non-english chars detected: {found_chars}")
-        print(f"Non-english chars Count: {len(found_chars)}")
+    all_found_chars = cyrillic + cjk + european
+    
+    unique_found_chars = set(all_found_chars)
+    count = len(unique_found_chars)
+    
+    if count >= 2:
+        # print(f"Non-english chars detected: {found_chars}")
+        print(f"Cyrillic : {cyrillic}")
+        print(f"CJK      : {cjk}")
+        print(f"European : {european}")
+        print(f"Total Unique Count: {count}")
         return True
     
     return False
@@ -3221,8 +3246,6 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                             # await asyncio.sleep(5)    
                         
                     # task.raw_extracted_text = extracted_text  # Store the raw OCR result
-                    
-                print(f"RAW extracted_text : {extracted_text}")
             else:
                 extracted_text = task.raw_extracted_text  # Use stored OCR result for regrade
                 print(f"Using stored OCR result for regrade: {extracted_text}")
@@ -3240,7 +3263,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             
             # Check if the text represents a Riven Mod (skip for manual)
-            if is_riven(extracted_text) == False:
+            if is_riven(extracted_text) == False or extracted_text == "":
                 await task.interaction.followup.send("❌ Failed to read the image", file=discord.File(output_riven))  # Use followup
                 # print(f"is_riven extracted_text : {extracted_text}")
                 return
@@ -3545,6 +3568,19 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
            
             variants = get_available_variants(file_path, base_name)
             
+            ## FIX OTHER LANGUAGE REGRADE/ CLEAN RAW EXTRACTED TEXT
+            if task.riven_rank == "Maxed":
+                rivenrank = 18
+            else:
+                rivenrank = 10
+                
+            task.raw_extracted_text = f"{rivenrank}{base_name}{buff_naming}{riven_stat_details.Value[0]}{riven_stat_details.StatName[0]}{riven_stat_details.Value[1]}{riven_stat_details.StatName[1]}"
+            
+            if riven_stat_details.Value[2] != 999.9:
+                task.raw_extracted_text += f"{riven_stat_details.Value[2]}{riven_stat_details.StatName[2]}"
+            if riven_stat_details.Value[3] != 999.9:
+                task.raw_extracted_text += f"{riven_stat_details.Value[3]}{riven_stat_details.StatName[3]}"
+            print(f"(Recreate) raw_extracted_text : {task.raw_extracted_text}")
             if out_range == True:
                 if len(variants) > 1:
                     add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n> Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147/1398554937776013425) to learn how to identify a Riven’s variant.\n"
@@ -3559,7 +3595,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                     
             elif out_range == False and out_range_faction == True:
                 title_text = "GRADING SUCCESS ✅️"
-                description_text = f"{task.interaction.user.mention}\n▶ Damage to Faction is out of range. You may ignore its grade if the Riven image is from the Warframe mobile app.\n\n{add_text}"
+                description_text = f"{task.interaction.user.mention}\n▶ Damage to Factions is out of range.\n> Ignore this if the Riven image is from the Warframe mobile app.\n> If the image is from in-game, please use the dropdown below to select the correct variant.\n\n{add_text}"
             else:
                 title_text = "GRADING SUCCESS ✅️"
                 description_text = f"{task.interaction.user.mention}\n{add_text}"
