@@ -1643,7 +1643,7 @@ def fix_stat_name(extracted_text: str) -> str:
 
     return " ".join(fixed_words)
 
-def get_stat_name(input_string, weapon_type):
+def get_stat_name_TEST(input_string, weapon_type):
     # Mapping full internal strings to their clean Display Names
     generic_stats = {
         "damagetocorpus": "Damage to Corpus",
@@ -1785,7 +1785,7 @@ def get_stat_name(input_string, weapon_type):
     
     return "can't find stat name"
 
-def get_stat_name_OLD(input_string):
+def get_stat_name(input_string, weapon_type):
     if "additional" in input_string:
         return "Additional Combo Count Chance"
     elif "gain" in input_string:
@@ -1802,7 +1802,7 @@ def get_stat_name_OLD(input_string):
         return "Cold"
     elif "comboduration" in input_string:
         return "Combo Duration"
-    elif "criticalchancefor" in input_string: # Maybe should "criticalchancefo" instead
+    elif "criticalchancefor" in input_string: # or "criticalchancefo"
         return "Critical Chance for Slide Attack"
     elif "criticalchance" in input_string:
         return "Critical Chance"
@@ -1890,7 +1890,7 @@ def get_base_stat(stat: str, weapon_type: str) -> float:
     if stat == "Additional Combo Count Chance":
         return 58.77
     elif stat == "Chance to Gain Combo Count":
-        return 58.77
+        return 104.85
     elif stat == "Ammo Maximum":
         if weapon_type == "Rifle":
             return 49.95
