@@ -1643,7 +1643,7 @@ def fix_stat_name(extracted_text: str) -> str:
 
     return " ".join(fixed_words)
 
-def get_stat_name_TEST(input_string, weapon_type):
+def get_stat_name(input_string, weapon_type):
     # Mapping full internal strings to their clean Display Names
     generic_stats = {
         "damagetocorpus": "Damage to Corpus",
@@ -1785,7 +1785,7 @@ def get_stat_name_TEST(input_string, weapon_type):
     
     return "can't find stat name"
 
-def get_stat_name(input_string, weapon_type):
+def get_stat_name_OLD(input_string, weapon_type):
     if "additional" in input_string:
         return "Additional Combo Count Chance"
     elif "gain" in input_string:
