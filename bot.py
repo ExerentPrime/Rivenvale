@@ -1,3 +1,5 @@
+# import easyocr
+# import functools
 import aiohttp
 import discord
 from discord import app_commands, File
@@ -16,7 +18,7 @@ import traceback
 from google import genai
 from google.genai import types
 import random
-
+import difflib
 from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -24,6 +26,22 @@ ocr_api = os.getenv("OCR_API")
 
 import asyncio
 grading_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent gradings
+
+# # easyocr setup here
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# # Point to your local model folder
+# model_path = os.path.join(current_dir, "easyocr_models")
+# if not os.path.exists(model_path):
+    # os.makedirs(model_path)
+# # Initialize the reader with the custom path
+# reader = easyocr.Reader(
+    # ['en'], 
+    # gpu=False, 
+    # model_storage_directory=model_path,
+    # user_network_directory=model_path,
+    # download_enabled=True  # Crucial: stops it from trying to reach the internet/C: drive
+# )
+# ocr_limit = asyncio.Semaphore(1) # Limit 1 concurrent easyocr
 
 # Set up bot with intents
 intents = discord.Intents.default()
@@ -548,6 +566,58 @@ async def convert_image_to_jpg(image_path, output_riven):
         print(f"Error converting image: {e}")
         raise
 
+async def get_ocr_result(filename):
+    """Prioritizes: 1. EasyOCR -> 2. OCR Space -> 3. Gemini"""
+    
+    # 1. Try EasyOCR (Local)
+    # print("Attempting Priority 1: EasyOCR...")
+    # text = await easyOCR(filename)
+    # if text and len(text.strip()) > 5: # Basic check if it found something useful
+        # return text, "EasyOCR"
+    # return "", "None"
+    # 2. Try OCR Space (API)
+    # print("Priority 1 failed/empty. Attempting Priority 2: OCR Space...")
+    print("Attempting OCR Space...")
+    text = await ocr_space_file(filename)
+    if text and text != "failed" and len(text.strip()) > 5:
+        return text, "OCR Space"
+    
+    # 3. Try Gemini (AI)
+    # print("Priority 2 failed/empty. Attempting Priority 3: Gemini...")
+    print("Attempting Gemini...")
+    text = await gemini_api(filename)
+    if text and "ERROR" not in text:
+        return text, "Gemini"
+    
+    # return "Limit Reached", "None"
+    return "failed", "None"
+
+async def easyOCR(filename):
+    """Try to extract text using EasyOCR with resource protection."""
+    async with ocr_limit:
+        try:
+            img = cv2.imread(filename)
+            if img is None:
+                return "Error: File not found"
+            loop = asyncio.get_event_loop()
+            
+            # detail=0 returns a simple list: ["Text1", "Text2"]
+            result = await loop.run_in_executor(
+                None, 
+                functools.partial(reader.readtext, img, detail=0)
+            )
+            
+            # Correct unpacking: result is just a list of strings
+            if result:
+                # Join the list into one single string
+                extracted_text = " ".join(result)
+                return extracted_text
+            return ""
+            
+        except Exception as e:
+            print(f"EasyOCR Error: {e}")
+            return ""
+            
 async def gemini_api(filename):
     if not gemini_client:
         return "ERROR: AI client not initialized."
@@ -1322,7 +1392,7 @@ def is_riven(extracted_text: str) -> bool:
         # Riven mod detected
         return True
 
-def get_value_and_stat_name(extracted_text, riven_stat_details):
+def get_value_and_stat_name(extracted_text, riven_stat_details, weapon_type):
     # Updated Regex pattern to match one or more numeric values followed by text
     pattern = r"(\+?\d+(\.\d+)?[a-zA-Z%]+)"
 
@@ -1350,7 +1420,7 @@ def get_value_and_stat_name(extracted_text, riven_stat_details):
         
         temp_name = match[len(numeric_value):]  # The remainder is the stat name
         
-        stat_name = get_stat_name(temp_name)
+        stat_name = get_stat_name(temp_name, weapon_type)
         if stat_name == "can't find stat name":
             stat_name = None  # If not found, set stat_name to None
         
@@ -1573,7 +1643,149 @@ def fix_stat_name(extracted_text: str) -> str:
 
     return " ".join(fixed_words)
 
-def get_stat_name(input_string):
+def get_stat_name(input_string, weapon_type):
+    # Mapping full internal strings to their clean Display Names
+    generic_stats = {
+        "damagetocorpus": "Damage to Corpus",
+        "damagetogrineer": "Damage to Grineer",
+        "damagetoinfested": "Damage to Infested",
+        "criticalchancefor": "Critical Chance for Slide Attack",
+        "criticalchance": "Critical Chance",
+        "criticaldamage": "Critical Damage",
+        "electricity": "Electricity",
+        "heat": "Heat",
+        "toxin": "Toxin",
+        "cold": "Cold",
+        "impact": "Impact",
+        "puncture": "Puncture",
+        "slash": "Slash",
+        "statuschance": "Status Chance",
+        "statusduration": "Status Duration"
+    }
+    
+    # Ranged only (Rifles, Pistols, Shotguns)
+    ranged_stats = {
+        "ammomaximum": "Ammo Maximum",
+        "damage": "Damage",
+        "firerate": "Fire Rate",
+        "projectilespeed": "Projectile Speed",
+        "magazinecapacity": "Magazine Capacity",
+        "multishot": "Multishot",
+        "punchthrough": "Punch Through",
+        "reloadspeed": "Reload Speed",
+        "weaponrecoil": "Weapon Recoil",
+        "zoom": "Zoom"
+    }
+
+    # Melee only
+    melee_stats = {
+        "additionalcombocountchance": "Additional Combo Count Chance",
+        "chancetogaincombocount": "Chance to Gain Combo Count",
+        "comboduration": "Combo Duration",
+        "meleedamage": "Melee Damage",
+        "finisherdamage": "Finisher Damage",
+        "attackspeed": "Attack Speed",
+        "initialcombo": "Initial Combo",
+        "heavyattackefficiency": "Heavy Attack Efficiency",
+        "range": "Range"
+    }
+    
+    stats_map = generic_stats.copy()  # Start with generic
+    if weapon_type == "Melee":
+        stats_map.update(melee_stats) # Add melee
+    else:
+        stats_map.update(ranged_stats) # Add ranged
+    
+    # Standardize input: lowercase and remove extra spaces
+    query = input_string.lower().strip()
+    query_len = len(query)
+    # print(query_len)
+    if "additional" in query:
+        return stats_map["additionalcombocountchance"]
+    if "gain" in query:
+        return stats_map["chancetogaincombocount"]
+    if "ammo" in query:
+        return stats_map["ammomaximum"]
+    if "corpus" in query:
+        return stats_map["damagetocorpus"]
+    if "grineer" in query:
+        return stats_map["damagetogrineer"]
+    if "infested" in query:
+        return stats_map["damagetoinfested"]
+    if "cold" in query:
+        return stats_map["cold"]
+    if "comboduration" in query:
+        return stats_map["comboduration"]
+    if "criticalchancefor" in query:
+        return stats_map["criticalchancefor"]
+    if "criticalchance" in query:
+        return stats_map["criticalchance"]
+    if "criticaldamage" in query:
+        return stats_map["criticaldamage"]
+    if "meleedamage" in query:
+        return stats_map["meleedamage"]
+    if "electricity" in query:
+        return stats_map["electricity"]
+    if "heat" in query:
+        return stats_map["heat"]
+    if "finisherdamage" in query:
+        return stats_map["finisherdamage"]
+    if "damage" in query and not "ldamage" in query:
+        return stats_map["damage"]
+    if "firerate" in query:
+        return stats_map["firerate"]
+    if "attackspeed" in query:
+        return stats_map["attackspeed"]
+    if "projectile" in query:
+        return stats_map["projectilespeed"]
+    if "initialcombo" in query:
+        return stats_map["initialcombo"]
+    if "impact" in query:
+        return stats_map["impact"]
+    if "magazine" in query:
+        return stats_map["magazinecapacity"]
+    if "heavyattack" in query:
+        return stats_map["heavyattackefficiency"]
+    if "multishot" in query:
+        return stats_map["multishot"]
+    if "toxin" in query:
+        return stats_map["toxin"]
+    if "punchthrough" in query:
+        return stats_map["punchthrough"]
+    if "puncture" in query:
+        return stats_map["puncture"]
+    if "reloadspeed" in query:
+        return stats_map["reloadspeed"]
+    if "range" in query:
+        return stats_map["range"]
+    if "slash" in query:
+        return stats_map["slash"]
+    if "statuschance" in query:
+        return stats_map["statuschance"]
+    if "statusduration" in query:
+        return stats_map["statusduration"]
+    if "weaponreco" in query:
+        return stats_map["weaponrecoil"]
+    if "zoom" in query:
+        return stats_map["zoom"]
+    
+    print(f"Something is blocking the stat name : {query}, Auto-fixing now...")
+    # --- FUZZY MATCH FALLBACK (Typos/With Length Constraint) ---
+    # If no keywords were found, try to find the closest match mathematically
+    possible_keys = [k for k in stats_map.keys() if len(k) >= query_len]
+    
+    if not possible_keys:
+        possible_keys = list(stats_map.keys())
+    
+    matches = difflib.get_close_matches(query, possible_keys, n=1, cutoff=0.4)
+
+    if matches:
+        # print(stats_map[matches[0]])
+        return stats_map[matches[0]]
+    
+    return "can't find stat name"
+
+def get_stat_name_OLD(input_string):
     if "additional" in input_string:
         return "Additional Combo Count Chance"
     elif "gain" in input_string:
@@ -1670,6 +1882,8 @@ def calculate_max(base_stat: float, weapon_dispo: float, riven_value: float) -> 
 
 def calculate_min(base_stat: float, weapon_dispo: float, riven_value: float) -> float:
     min_value = 0.9 * base_stat * weapon_dispo * riven_value
+    # min_value = (0.9 - (base_stat * riven_value)) / weapon_dispo
+    # print(f" {min_value} = 0.9 * {base_stat} * {weapon_dispo} * {riven_value}")
     return abs(min_value)  # Ensure the value is always positive
 
 def get_base_stat(stat: str, weapon_type: str) -> float:
@@ -1861,10 +2075,12 @@ def calculate_stats(riven_stat_details, weapon_type, weapon_dispo):
     elif riven_stat_details.RivenType == "3 Buff 1 Curse":
         for i in range(3):
             base_stat = get_base_stat(riven_stat_details.StatName[i], weapon_type)
+            # print(f"Base stat : {base_stat}")
             riven_stat_details.Min[i] = calculate_min(base_stat, weapon_dispo, 0.9375)
             riven_stat_details.Max[i] = calculate_max(base_stat, weapon_dispo, 0.9375)
 
         base_stat = get_base_stat(riven_stat_details.StatName[3], weapon_type)
+        # print(f"Base stat Curse : {base_stat}")
         riven_stat_details.Min[3] = calculate_min(base_stat, weapon_dispo, -0.75)
         riven_stat_details.Max[3] = calculate_max(base_stat, weapon_dispo, -0.75)
         # if "Recoil" in riven_stat_details.StatName[3]:
@@ -2117,7 +2333,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
     riven_image_x = 33 + (box_width - riven_image.width) // 2
     riven_image_y = (box_height - riven_image.height) // 2
     
-    if ocr_engine == "OCR Space":
+    if ocr_engine == "Auto":
         background.paste(riven_image, (riven_image_x, riven_image_y)) # not transparent
     else:
         background.paste(riven_image, (riven_image_x, riven_image_y), riven_image) # transparent
@@ -2332,7 +2548,7 @@ async def create_grading_image(riven_stat_details, weapon_name, weapon_dispo, im
         i+=1
         
     # Recreate riven mod - For manual grading only
-    if ocr_engine != "OCR Space":
+    if ocr_engine != "Auto":
         weapon_name_font_size = 14
         stat_font_size = 12
         dpi = 96
@@ -2549,6 +2765,20 @@ def check_out_range(riven_stat_details):
     return out_range, out_range_faction
 
 def non_english_detector(text: str) -> bool:
+    # 1. We define what IS allowed
+    allowed_pattern = r'[^a-zA-Z0-9\s\.\&\%\,\:\'\+\(\)\-\•\°\·\_\|\[\]\*]'
+    
+    # 2. Find everything that is NOT in that allowed list.
+    found_chars = re.findall(allowed_pattern, text)
+    
+    if len(found_chars) > 2:
+        print(f"Non-english chars detected: {found_chars}")
+        print(f"Non-english chars Count: {len(found_chars)}")
+        return True
+    
+    return False
+
+def non_english_detector_OLD(text: str) -> bool:
     """
     Detects if the text contains characters from a non-Latin script (e.g., Cyrillic,
     Chinese) or Latin characters with diacritics (e.g., French, German).
@@ -2932,10 +3162,10 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             # print("\n" + "=" * 34)
             # print("|       STARTING REGRADING       |")
             # print("=" * 34 + "\n")
-
+        # print(f"Current task.ocr_engine is : {task.ocr_engine}")
         try:  
             # Skip image processing for manual grading
-            if task.ocr_engine == "OCR Space":
+            if task.ocr_engine == "Auto":
                 output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
                 await convert_image_to_jpg(task.image, output_riven)
             else:
@@ -2955,56 +3185,64 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             # Skip OCR if raw_extracted_text already exists (regrade case)
             if task.raw_extracted_text is None:
                 # Process the image using OCR API
-                if task.ocr_engine == "OCR Space":
-                    print(f"OCR Space detection used...")
-                    extracted_text = await ocr_space_file(output_riven)
-                    # extracted_text = "failed"
+                if task.ocr_engine == "Auto":
+                    # Use the priority router
+                    extracted_text, used_engine = await get_ocr_result(output_riven)
+                    # task.ocr_engine = used_engine # Update the task with which engine actually worked
                     
-                    non_english = False
-                    if non_english_detector(extracted_text) == True:
-                        non_english = True
-                        print(f"Non-english detected")
-                        print(f"OCR Space result : {extracted_text}")
+                    # if not extracted_text:
+                        # await task.interaction.followup.send("All OCR engines failed to read the image. Please try a clearer screenshot.")
+                        # return
                     
-                    # Use Gemini if OCRSpace is unavailable
-                    if extracted_text == "failed" or non_english == True:
-                        print(f"Gemini detection used...")
-                        counter = 0
-                        while True:
-                            extracted_text = await gemini_api(output_riven)
-                            if "ERROR" not in extracted_text:
-                                break
-                            counter+=1
+                    # print(f"OCR Space detection used...")
+                    # extracted_text = await ocr_space_file(output_riven)
+                    # # extracted_text = "failed"
+                    
+                    # non_english = False
+                    # if non_english_detector(extracted_text) == True:
+                        # non_english = True
+                        # print(f"OCR Space result : {extracted_text}")
+                    
+                    # # Use Gemini if OCRSpace is unavailable
+                    # if extracted_text == "failed" or non_english == True:
+                        # print(f"Gemini detection used...")
+                        # counter = 0
+                        # while True:
+                            # extracted_text = await gemini_api(output_riven)
+                            # if "ERROR" not in extracted_text:
+                                # break
+                            # counter+=1
                             
-                            if counter == 4:
-                                extracted_text = "Limit Reached"
-                                break
+                            # if counter == 4:
+                                # extracted_text = "Limit Reached"
+                                # break
                             
-                            print(f"{counter} , retrying....")
-                            await asyncio.sleep(5)    
+                            # print(f"{counter} , retrying....")
+                            # await asyncio.sleep(5)    
                         
-                    task.raw_extracted_text = extracted_text  # Store the raw OCR result
+                    # task.raw_extracted_text = extracted_text  # Store the raw OCR result
+                    
                 print(f"RAW extracted_text : {extracted_text}")
             else:
                 extracted_text = task.raw_extracted_text  # Use stored OCR result for regrade
                 print(f"Using stored OCR result for regrade: {extracted_text}")
-                
+            
             if extracted_text == "failed":
                 await task.interaction.followup.send(embed=discord.Embed(title="OCR API Status",description="❌ Down!",color=discord.Color.red()))
                 await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
                 return
-            # extracted_text = "Limit Reached"
-            if extracted_text == "Limit Reached":
-                await task.interaction.followup.send(embed=discord.Embed(title="Secondary OCR API Status",description="❌ The limit have been reached! (20 requests per day)",color=discord.Color.red()).set_footer(text="Secondary OCR API is only used when the main OCR API is unavailable."))
-                await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
-                #await task.interaction.channel.send("▶ If the riven is English text, try again later. The main OCR API is usually down for just a few minutes.\n▶ If the riven has **NON-ENGLISH** text, try again tomorrow (Reset at midnight Pacific Time) **OR** grade now using manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
-                return
-            # return
-    
+            # # extracted_text = "Limit Reached"
+            # if extracted_text == "Limit Reached":
+                # await task.interaction.followup.send(embed=discord.Embed(title="Secondary OCR API Status",description="❌ The limit have been reached! (20 requests per day)",color=discord.Color.red()).set_footer(text="Secondary OCR API is only used when the main OCR API is unavailable."))
+                # await task.interaction.channel.send("Please try again later, or use manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+                # #await task.interaction.channel.send("▶ If the riven is English text, try again later. The main OCR API is usually down for just a few minutes.\n▶ If the riven has **NON-ENGLISH** text, try again tomorrow (Reset at midnight Pacific Time) **OR** grade now using manual grading instead. [(how to?)](https://discord.com/channels/1350251436977557534/1350258178998276147/1410190204551041117)")
+                # return
+            
+            
             # Check if the text represents a Riven Mod (skip for manual)
-            if task.ocr_engine == "OCR Space" and is_riven(extracted_text) == False:
-                await task.interaction.followup.send("Please upload an image containing only one visible Riven Mod. Do not include any extra text, only the Riven Mod itself.", file=discord.File(output_riven))  # Use followup
-                print(f"is_riven extracted_text : {extracted_text}")
+            if is_riven(extracted_text) == False:
+                await task.interaction.followup.send("❌ Failed to read the image", file=discord.File(output_riven))  # Use followup
+                # print(f"is_riven extracted_text : {extracted_text}")
                 return
             
             # Replace a space with a dot only if there are numbers on both sides of the space
@@ -3015,7 +3253,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             #print(f"RAW extracted_text : {extracted_text}")
             # return
             # Remove special characters except this
-            extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:\']", "", extracted_text)
+            extracted_text = re.sub(r"[^a-zA-Z0-9\s\-\.\&\%\,\:\'\+]", "", extracted_text)
 
             # Remove unnecessary text in riven mod
             extracted_text = re.sub(r"x2forheavyattacks", "", extracted_text, flags=re.IGNORECASE)
@@ -3038,7 +3276,9 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
     
             # Use regex to remove dots between numbers and letters
             extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
-    
+            # Cut off everything starting from 'mr'
+            extracted_text = re.split(r'mr', extracted_text, flags=re.IGNORECASE)[0]
+            
             print(f"FILTER extracted_text : {extracted_text}")
     
             # Create an instance of RivenStatDetails
@@ -3048,7 +3288,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank, task.weapon_variant)
             print(f"weapon_name : {weapon_name}")
             if weapon_name_found == False:
-                if task.ocr_engine == "OCR Space":
+                if task.ocr_engine == "Auto":
                     await task.interaction.followup.send(
                         f"**Weapon name not found!**\n"
                         f"▶ Ensure all Riven Mod details are fully visible and not obscured.\n"
@@ -3100,13 +3340,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 notes = ""
             
             if found:
-                add_text = f"**Recommended rolls for {base_name.title()}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n Use `/legend` command for Legend/Key"
+                add_text = f"**Recommended rolls for {base_name.title()}** [(source)](https://docs.google.com/spreadsheets/d/1zbaeJBuBn44cbVKzJins_E3hTDpnmvOk8heYN-G8yy8)\nPositive Stats : {positive_stats}\nNegative Stats : {negative_stats}\n{notes}\n> Use `/legend` command for Legend/Key"
             else:
                 add_text = f""
             
             # Count buff stat
             extracted_text = extracted_text.lower()
-            if task.ocr_engine == "OCR Space":
+            if task.ocr_engine == "Auto":
                 buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
                 riven_stat_details.BuffCount = buff_count
             else:
@@ -3125,7 +3365,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             # Get value and stat name
             try:
-                get_value_and_stat_name(extracted_text, riven_stat_details)
+                get_value_and_stat_name(extracted_text, riven_stat_details, task.weapon_type)
             except Exception as e:
                 print(f"Error: {e}")
                 await task.interaction.followup.send(f"Error! Failed to retrieve the value and stat name. This may be due to the image being too low in resolution or something obscuring the text. Please retake the screenshot and try again.")  # Use followup
@@ -3142,8 +3382,14 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             # Stat Name correction
             for i in range(riven_stat_details.StatCount):
-                if "Fire Rate" in riven_stat_details.StatName[i] and task.weapon_type == "Melee":
+                if "Fire Rate" == riven_stat_details.StatName[i] and task.weapon_type == "Melee":
                     riven_stat_details.StatName[i] = "Attack Speed"
+                elif "Attack Speed" == riven_stat_details.StatName[i] and task.weapon_type != "Melee":
+                    riven_stat_details.StatName[i] = "Fire Rate"
+                elif "Melee Damage" == riven_stat_details.StatName[i] and task.weapon_type != "Melee":
+                    riven_stat_details.StatName[i] = "Damage"
+                elif "Damage" == riven_stat_details.StatName[i] and task.weapon_type == "Melee":
+                    riven_stat_details.StatName[i] = "Melee Damage"
     
             # # Value Correction
             # for i in range(riven_stat_details.StatCount):
@@ -3301,13 +3547,13 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             if out_range == True:
                 if len(variants) > 1:
-                    add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n▶ Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147/1398554937776013425) to learn how to identify a Riven’s variant.\n"
+                    add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n> Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147/1398554937776013425) to learn how to identify a Riven’s variant.\n"
                 else:
                     add_text_2 = ""
                 title_text = "GRADING FAILED ❌"
                 
-                if task.ocr_engine == "OCR Space":
-                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If any stats are missing, please upload a clearer image with a better flat angle.\n▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If the Riven image is sourced from the **riven.market** or **warframe.market** website, be aware that some Rivens may display incorrect or outdated stats due to older uploads or errors made by the uploader."
+                if task.ocr_engine == "Auto":
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ Stats missing or wrong? Please upload a clearer, flat image with readable text.\n▶ If the stats values are outside the min-max range, please adjust the Riven rank manually. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ **BE AWARE**: If the Riven image is from **riven.market**, **warframe.market**, or **any other website**, the stats may be incorrect or outdated due to old uploads or uploader errors."
                 else:
                     description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If it still fails, it may be due to an incorrect input or because the Riven you are referring to is outdated."
                     
@@ -3328,7 +3574,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             
             embed = discord.Embed(title=title_text, description=description_text, color=discord.Color.purple())
             # Add a footer to the embed
-            if task.ocr_engine == "OCR Space": 
+            if task.ocr_engine == "Auto": 
                 embed.set_footer(text=f"Tips: Use an in-game image and a maxed-rank Riven mod for optimal grading!")
             elif task.ocr_engine == "Manual": 
                 embed.set_footer(text=f"Tips: Use a maxed-rank Riven mod for optimal grading!")
@@ -3557,6 +3803,9 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
     try:
         await interaction.response.defer(thinking=True)
         
+        # if ocr_limit.locked():
+            # print(f"Queue Trigger!")
+        
         # Set default values
         weapon_variant = "Normal"
         weapon_type = "Auto"
@@ -3630,7 +3879,7 @@ async def grading(interaction: discord.Interaction, image: discord.Attachment,ri
                     riven_rank=riven_rank,
                     image=temp_filename,  # Pass file path directly
                     platinum=platinum,
-                    ocr_engine="OCR Space",
+                    ocr_engine="Auto",
                     buff_count=0
                 )
                 
