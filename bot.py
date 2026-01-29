@@ -3569,18 +3569,20 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             variants = get_available_variants(file_path, base_name)
             
             ## FIX OTHER LANGUAGE REGRADE/ CLEAN RAW EXTRACTED TEXT
-            if task.riven_rank == "Maxed":
-                rivenrank = 18
-            else:
-                rivenrank = 10
+            if task.ocr_engine == "Auto":
+                if task.riven_rank == "Maxed":
+                    rivenrank = 18
+                else:
+                    rivenrank = 10
+                    
+                task.raw_extracted_text = f"{rivenrank}{base_name}{buff_naming}{riven_stat_details.Value[0]}{riven_stat_details.StatName[0]}{riven_stat_details.Value[1]}{riven_stat_details.StatName[1]}"
                 
-            task.raw_extracted_text = f"{rivenrank}{base_name}{buff_naming}{riven_stat_details.Value[0]}{riven_stat_details.StatName[0]}{riven_stat_details.Value[1]}{riven_stat_details.StatName[1]}"
-            
-            if riven_stat_details.Value[2] != 999.9:
-                task.raw_extracted_text += f"{riven_stat_details.Value[2]}{riven_stat_details.StatName[2]}"
-            if riven_stat_details.Value[3] != 999.9:
-                task.raw_extracted_text += f"{riven_stat_details.Value[3]}{riven_stat_details.StatName[3]}"
-            print(f"(Recreate) raw_extracted_text : {task.raw_extracted_text}")
+                if riven_stat_details.Value[2] != 999.9:
+                    task.raw_extracted_text += f"{riven_stat_details.Value[2]}{riven_stat_details.StatName[2]}"
+                if riven_stat_details.Value[3] != 999.9:
+                    task.raw_extracted_text += f"{riven_stat_details.Value[3]}{riven_stat_details.StatName[3]}"
+                print(f"(Recreate) raw_extracted_text : {task.raw_extracted_text}")
+                
             if out_range == True:
                 if len(variants) > 1:
                     add_text_2 = "▶ Please use the dropdown below to select the correct variant.\n> Check [#important-info](https://discord.com/channels/1350251436977557534/1350258178998276147/1398554937776013425) to learn how to identify a Riven’s variant.\n"
