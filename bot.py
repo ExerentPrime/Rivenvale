@@ -1309,6 +1309,8 @@ def combine_with_variant(weapon_name: str, weapon_variant: str) -> str:
         if "Prime" not in weapon_name:
             if "Pangolin" in weapon_name:
                 return "Pangolin Prime"
+            elif "Laser Rifle" in weapon_name:
+                return "Prime " + weapon_name
             else:
                 return weapon_name + " Prime"
         else:
@@ -2917,7 +2919,7 @@ async def random_reroll(interaction, name:str, weapon_type:str = None, weapon_va
                     else:
                         v = v.replace(name, "").strip()
                         v = v.replace("-", "")
-                        # print(f"v after : {v}")
+                        # print(f"variant only : {v}")
                     
                     weapon_dispo, new_name = get_weapon_dispo(file_path, name, v, weapon_type)
                 
