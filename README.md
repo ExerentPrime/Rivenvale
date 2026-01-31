@@ -60,6 +60,7 @@ Inside your project folder, create a file named `.env` and add your keys:
 ```
 DISCORD_BOT_TOKEN=AAAa99A99AA9A9Aaa99AAA9A999Aa.aAAaaA.AAAAaAaAAA_aaaaa99999AaAaAaAAaa
 OCR_API=K99999999999999
+GEMINI_API_KEY=AIzaSyA_ExampleKey_1234567890abcdefGHIJKL
 ```
 
 ## 📋 Requirements
