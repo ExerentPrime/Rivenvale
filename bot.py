@@ -578,14 +578,22 @@ async def get_ocr_result(filename):
     # return "", "None"
     # 2. Try OCR Space (API)
     # print("Priority 1 failed/empty. Attempting Priority 2: OCR Space...")
+    counter = 0
     print("Attempting OCR Space...")
-    text = await ocr_space_file(filename)
-    print(f"RAW OCR Space result :\n{text}")
-    if text and text != "failed" and len(text.strip()) > 5:
-        if non_english_detector(text):
-            print(f"Non-english detected!")
-        else:
-            return text, "OCR Space"
+    while counter < 2:
+        text = await ocr_space_file(filename)
+        # text = "failed"
+        print(f"RAW OCR Space result :\n{text}")
+        if "failed" in text:
+            counter+=1
+            if counter < 2:
+                print(f"{counter} , retrying....")
+                await asyncio.sleep(5)
+        elif text and text != "failed" and len(text.strip()) > 5:
+            if non_english_detector(text):
+                print(f"Non-english detected!")
+            else:
+                return text, "OCR Space"
             
     # if len(text.strip()) < 5:
         # return "", "None"
@@ -731,7 +739,7 @@ async def ocr_space_file(filename):
             "language": "eng",
             "ocrengine": "2",
             "scale": "true",
-            "istable": "false",
+            "istable": "true",
         }
         with open(filename, 'rb') as f:
             r = requests.post(
@@ -1187,7 +1195,14 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
                 if extracted_text[index + 3] == "i":
                     print("Found 'Lex' followed by 'i'!")
                     continue
-                
+        
+        if temp_name == "Bo":
+            index = extracted_text.find("Bo")
+            if index + 3 < len(extracted_text):
+                if extracted_text[index + 2] == "w":
+                    print("Found 'Bo' followed by 'w'!")
+                    continue
+                    
         # Remove spaces from the name
         if " " in temp_name:
             temp_name = temp_name.replace(" ", "")
@@ -1719,87 +1734,89 @@ def get_stat_name(input_string, weapon_type):
     query = input_string.lower().strip()
     query_len = len(query)
     # print(query_len)
-    if "additional" in query:
-        return stats_map["additionalcombocountchance"]
-    if "gain" in query:
-        return stats_map["chancetogaincombocount"]
-    if "ammo" in query:
-        return stats_map["ammomaximum"]
-    if "corpus" in query:
-        return stats_map["damagetocorpus"]
-    if "grineer" in query:
-        return stats_map["damagetogrineer"]
-    if "infested" in query:
-        return stats_map["damagetoinfested"]
-    if "cold" in query:
-        return stats_map["cold"]
-    if "comboduration" in query:
-        return stats_map["comboduration"]
-    if "criticalchancefor" in query:
-        return stats_map["criticalchancefor"]
-    if "criticalchance" in query:
-        return stats_map["criticalchance"]
-    if "criticaldamage" in query:
-        return stats_map["criticaldamage"]
-    if "meleedamage" in query:
-        return stats_map["meleedamage"]
-    if "electricity" in query:
-        return stats_map["electricity"]
-    if "heat" in query:
-        return stats_map["heat"]
-    if "finisherdamage" in query:
-        return stats_map["finisherdamage"]
-    if "damage" in query and not "ldamage" in query:
-        return stats_map["damage"]
-    if "firerate" in query:
-        return stats_map["firerate"]
-    if "attackspeed" in query:
-        return stats_map["attackspeed"]
-    if "projectile" in query:
-        return stats_map["projectilespeed"]
-    if "initialcombo" in query:
-        return stats_map["initialcombo"]
-    if "impact" in query:
-        return stats_map["impact"]
-    if "magazine" in query:
-        return stats_map["magazinecapacity"]
-    if "heavyattack" in query:
-        return stats_map["heavyattackefficiency"]
-    if "multishot" in query:
-        return stats_map["multishot"]
-    if "toxin" in query:
-        return stats_map["toxin"]
-    if "punchthrough" in query:
-        return stats_map["punchthrough"]
-    if "puncture" in query:
-        return stats_map["puncture"]
-    if "reloadspeed" in query:
-        return stats_map["reloadspeed"]
-    if "range" in query:
-        return stats_map["range"]
-    if "slash" in query:
-        return stats_map["slash"]
-    if "statuschance" in query:
-        return stats_map["statuschance"]
-    if "statusduration" in query:
-        return stats_map["statusduration"]
-    if "weaponreco" in query:
-        return stats_map["weaponrecoil"]
-    if "zoom" in query:
-        return stats_map["zoom"]
+    # if "additional" in query:
+        # return stats_map["additionalcombocountchance"]
+    # if "gain" in query:
+        # return stats_map["chancetogaincombocount"]
+    # if "ammo" in query:
+        # return stats_map["ammomaximum"]
+    # if "corpus" in query:
+        # return stats_map["damagetocorpus"]
+    # if "grineer" in query:
+        # return stats_map["damagetogrineer"]
+    # if "infested" in query:
+        # return stats_map["damagetoinfested"]
+    # if "cold" in query:
+        # return stats_map["cold"]
+    # if "comboduration" in query:
+        # return stats_map["comboduration"]
+    # if "criticalchancefor" in query:
+        # return stats_map["criticalchancefor"]
+    # if "criticalchance" in query:
+        # return stats_map["criticalchance"]
+    # if "criticaldamage" in query:
+        # return stats_map["criticaldamage"]
+    # if "meleedamage" in query:
+        # return stats_map["meleedamage"]
+    # if "electricity" in query:
+        # return stats_map["electricity"]
+    # if "heat" in query:
+        # return stats_map["heat"]
+    # if "finisherdamage" in query:
+        # return stats_map["finisherdamage"]
+    # if "damage" in query and not "ldamage" in query:
+        # return stats_map["damage"]
+    # if "firerate" in query:
+        # return stats_map["firerate"]
+    # if "attackspeed" in query:
+        # return stats_map["attackspeed"]
+    # if "projectile" in query:
+        # return stats_map["projectilespeed"]
+    # if "initialcombo" in query:
+        # return stats_map["initialcombo"]
+    # if "impact" in query:
+        # return stats_map["impact"]
+    # if "magazine" in query:
+        # return stats_map["magazinecapacity"]
+    # if "heavyattack" in query:
+        # return stats_map["heavyattackefficiency"]
+    # if "multishot" in query:
+        # return stats_map["multishot"]
+    # if "toxin" in query:
+        # return stats_map["toxin"]
+    # if "punchthrough" in query:
+        # return stats_map["punchthrough"]
+    # if "puncture" in query:
+        # return stats_map["puncture"]
+    # if "reloadspeed" in query:
+        # return stats_map["reloadspeed"]
+    # if "range" in query:
+        # return stats_map["range"]
+    # if "slash" in query:
+        # return stats_map["slash"]
+    # if "statuschance" in query:
+        # return stats_map["statuschance"]
+    # if "statusduration" in query:
+        # return stats_map["statusduration"]
+    # if "weaponreco" in query:
+        # return stats_map["weaponrecoil"]
+    # if "zoom" in query:
+        # return stats_map["zoom"]
     
-    print(f"Something is blocking the stat name : {query}, Auto-fixing now...")
+    # print(f"Something is blocking the stat name : {query},")
     # --- FUZZY MATCH FALLBACK (Typos/With Length Constraint) ---
     # If no keywords were found, try to find the closest match mathematically
-    possible_keys = [k for k in stats_map.keys() if len(k) >= query_len]
+    # possible_keys = [k for k in stats_map.keys() if len(k) >= query_len]
+    possible_keys = [k for k in stats_map.keys()]
     
     if not possible_keys:
         possible_keys = list(stats_map.keys())
-    
-    matches = difflib.get_close_matches(query, possible_keys, n=1, cutoff=0.4)
+    # print(f"query : {query}")
+    matches = difflib.get_close_matches(query, possible_keys, n=1, cutoff=0.5)
 
     if matches:
         # print(stats_map[matches[0]])
+        print(f"Detected/Auto-fixing : {query} --> {stats_map[matches[0]]}")
         return stats_map[matches[0]]
     
     return "can't find stat name"
@@ -3303,6 +3320,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
             # Cut off everything starting from 'mr'
             extracted_text = re.split(r'mr', extracted_text, flags=re.IGNORECASE)[0]
+            # Delete &
+            extracted_text = re.sub(r'([\d%])&', r'\1', extracted_text)
             
             print(f"FILTER extracted_text : {extracted_text}")
     
@@ -3378,6 +3397,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 riven_stat_details.BuffCount = task.buff_count
             # return
             # Get weapon disposition and update weapon name with variant
+            # print(f"BEFORE GET DISPO:\nweapon_name : {weapon_name}\nweapon_variant : {task.weapon_variant}\nweapon_type : {task.weapon_type}")
             weapon_dispo, weapon_name = get_weapon_dispo(file_path, weapon_name, task.weapon_variant, task.weapon_type)
             
             if weapon_dispo == 0:
