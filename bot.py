@@ -580,13 +580,13 @@ async def get_ocr_result(filename):
     # print("Priority 1 failed/empty. Attempting Priority 2: OCR Space...")
     counter = 0
     print("Attempting OCR Space...")
-    while counter < 2:
+    while counter < 4:
         text = await ocr_space_file(filename)
         # text = "failed"
         print(f"RAW OCR Space result :\n{text}")
         if "failed" in text:
             counter+=1
-            if counter < 2:
+            if counter < 4:
                 print(f"{counter} , retrying....")
                 await asyncio.sleep(5)
         elif text and text != "failed" and len(text.strip()) > 5:
@@ -788,7 +788,36 @@ async def check_ocr_space_api():
         except Exception as e:
             return discord.Embed(title="OCR API Status", description=f"❌ Error: {str(e)}", color=0xFF0000)
 
-def get_buff_count(extracted_text: str):
+def get_buff_count(riven_stat_details, weapon_type, weapon_dispo):
+    
+    count = riven_stat_details.StatCount
+    
+    if count == 2: # Detect only 2 stat? 2 buff 100%!
+        return 2
+    elif count == 3: # Can be eiter 2 buff 1 curse or 3 buff 0 curse
+        
+        # Check if last stat is curse
+        base_stat = get_base_stat(riven_stat_details.StatName[2], weapon_type)
+        min = calculate_min(base_stat, weapon_dispo, -0.495)
+        max = calculate_max(base_stat, weapon_dispo, -0.495)
+        
+        # Unranked
+        min_unranked = min / 9
+        max_unranked = max / 9
+        
+        if min <= riven_stat_details.Value[2] <= max:
+            return 2
+        elif min_unranked <= riven_stat_details.Value[2] <= max_unranked:
+            return 2
+        else:
+            return 3
+        
+    elif count == 4: # 3 buff 1 curse 100%!
+        return 3
+    else:
+        return count
+        
+def get_buff_count_OLD(extracted_text: str):
     buff_count = 0
     buff_naming = ""
     
@@ -1148,6 +1177,125 @@ def get_dmgPerShot(name, weapon_variant):
     
     return all_damage
 
+def get_core_details(file_path, extracted_text, weapon_type, riven_rank):
+    weapon_name = ""
+    weapon_name_found = False
+    data = load_weapon_data(file_path)
+    
+    # We clean the text but keep a version for slicing
+    extracted_text_copy = extracted_text.replace(" ", "").strip()
+    text_to_search = extracted_text.lower().replace(" ", "").strip()
+    
+    # text_to_search = re.sub(r"(18|10)", "", text_to_search[:5])
+    head = text_to_search[:5]
+    tail = text_to_search[5:]
+    head = re.sub(r"10|18|5|9", "", head)
+    text_to_search = head + tail
+    # print(f"text_to_search : {text_to_search}")
+    
+    # Sort weapons by name length (Longest First)
+    weapon_list = data.get("ExportWeapons", [])
+    weapon_list.sort(key=lambda x: len(x['name']), reverse=True)
+
+    thresholds = [1.0, 0.9, 0.8, 0.7, 0.6]
+    best_match = None
+    last_match_end = 0
+    
+    for level in thresholds:
+        for weapon in weapon_list:
+            name_clean = weapon['name'].lower().replace(" ", "")
+            search_window = text_to_search[:len(name_clean) + 2]
+            
+            # if name_clean == "torid":
+                # print(f"###### search_window : {search_window}")
+            
+            if level == 1.0:
+                # Exact match check
+                if name_clean in text_to_search:
+                    best_match = weapon['name']
+                    # For an exact match, the 'end' is just the start index + length
+                    start_idx = text_to_search.find(name_clean)
+                    last_match_end = start_idx + len(name_clean)
+                    break
+            else:
+                # Fuzzy match check
+                matcher = difflib.SequenceMatcher(None, name_clean, search_window)
+                score = matcher.ratio()
+                
+                # if name_clean == "torid":
+                    # print(f"###### score : {score}")
+                
+                if score >= level:
+                    best_match = weapon['name']
+                    # Calculate where the fuzzy match ends
+                    blocks = matcher.get_matching_blocks()
+                    for block in blocks:
+                        last_match_end = max(last_match_end, block.b + block.size)
+                    break
+
+        if best_match:
+            print(f"Match found at similarity {level}: {best_match}")
+            # Update text to remove the weapon name part
+            # print(f"extracted_text before : {extracted_text}")
+            # extracted_text = extracted_text_copy[last_match_end:]
+            if level == 1.0:
+                extracted_text = text_to_search[len(name_clean):]
+            else:
+                extracted_text = text_to_search[len(search_window):]
+            # print(f"extracted_text after : {extracted_text}")
+            weapon_name = best_match
+            weapon_name_found = True
+            break
+    print(f"search_window : {search_window}")
+    # TRY TO IDENTIFY RIVEN RANK IF POSSIBLE
+    if weapon_name_found:
+        # Check if "10|5" or "18|9" appears right before the weapon name
+        if riven_rank == "Auto":
+            if "18" in extracted_text_copy[:5] or "9" in extracted_text_copy[:5]:
+                riven_rank = "Maxed"
+                print("Riven rank is detected from the Riven mod.")
+            elif "10" in extracted_text_copy[:5] or "5" in extracted_text_copy[:5]:
+                riven_rank = "Unranked"
+                print("Riven rank is detected from the Riven mod.")
+    
+    # GET THE WEAPON TYPE
+    if weapon_name_found:
+        if weapon_type == "Auto":
+            # For Kitguns, set default type based on variant
+            if is_kitgun(weapon_name):
+                weapon_type = "Pistols"  # Default to Secondary
+            else:
+                temp_type = weapon['productCategory']
+            
+            if weapon_name == "Vinquibus":
+                matcher = difflib.SequenceMatcher(None, "Vinquibusmelee", extracted_text_copy[:len(weapon_name) + 4])
+                score = matcher.ratio()
+                if score >= 0.7:
+                    temp_type = "Melee"
+                    
+            if temp_type == "LongGuns":
+                if is_shotgun(weapon_name):
+                    weapon_type = "Shotgun"
+                elif is_kitgun(weapon_name):
+                    weapon_type = "Kitgun"
+                else:
+                    weapon_type = "Rifle"
+            elif temp_type == "SentinelWeapons":
+                weapon_type = get_type_sentinel_weapon(weapon_name)
+            elif temp_type == "Pistols":
+                if is_zaw(weapon_name):
+                    weapon_type = "Melee"
+                elif is_kitgun(weapon_name):
+                    weapon_type = "Kitgun"
+                else:
+                    weapon_type = "Pistols"
+            elif temp_type == "Melee":
+                weapon_type = "Melee"
+            elif temp_type == "SpaceGuns":
+                weapon_type = "Archgun"
+    
+    return weapon_name, weapon_name_found, weapon_type, riven_rank, extracted_text
+    
 def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven_rank:str, weapon_variant:str):
     weapon_name = ""
     weapon_name_found = False
@@ -1165,33 +1313,14 @@ def get_weapon_name(file_path: str, extracted_text: str, weapon_type: str, riven
     # Apply replacements
     for incorrect, correct in fixes.items():
         extracted_text = extracted_text.replace(incorrect, correct)
-        # break
-    
-    # print(f"extracted_text ============= \n{extracted_text}")
-    
-    # # Fix for AX-52
-    # if "Ax-52" in extracted_text:
-        # extracted_text = extracted_text.replace("Ax-52","AX-52")
-    
-    # # Fix for EFV-8 Mars
-    # if "Efv-8Mars" in extracted_text:
-        # extracted_text = extracted_text.replace("Efv-8Mars","EFV-8Mars")
-    
-    # # Fix for EFV-8 Jupiter
-    # if "Efv-5Jupiter" in extracted_text:
-        # extracted_text = extracted_text.replace("Efv-5Jupiter","EFV-5Jupiter")
     
     for weapon in data.get("ExportWeapons", []):
         temp_name = weapon['name']
-        # variants = ["Prime","Prisma","Wraith","Tenet","Kuva","Coda","Vandal","Rakta","Telos","Vaykor","Sancti","Secura","Synoid","Dex","MK1-"]
-        # if weapon_variant in variants:
-            # if weapon_variant not in temp_name:
-                # continue
         
         # bug fix for Lexi detect as Lex (weapon)
         if temp_name == "Lex":
             index = extracted_text.find("Lex")
-            if index + 3 < len(extracted_text):  # Make sure there's a next character
+            if index + 3 < len(extracted_text):  # If there's a next character
                 if extracted_text[index + 3] == "i":
                     print("Found 'Lex' followed by 'i'!")
                     continue
@@ -1816,7 +1945,7 @@ def get_stat_name(input_string, weapon_type):
 
     if matches:
         # print(stats_map[matches[0]])
-        print(f"Detected/Auto-fixing : {query} --> {stats_map[matches[0]]}")
+        print(f"Auto-fixing : {query} --> {stats_map[matches[0]]}")
         return stats_map[matches[0]]
     
     return "can't find stat name"
@@ -2201,7 +2330,7 @@ def damage_to_faction_fix(riven_stat_details, i):
             riven_stat_details.Value[i] = riven_stat_details.Value[i] * 100 - 100
         else:
             riven_stat_details.Value[i] = (1 - riven_stat_details.Value[i]) * 100
-
+       
 def get_recommended_stats(weapon_name:str, weapon_type:str):
     column_positive = ''
     column_negative = ''
@@ -3194,19 +3323,6 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
         print("|        STARTING        |")
         print("=" * 26 + "\n")
         
-        # if is_edit == False:    
-            # print("\n" + "=" * 34)
-            # print("|        STARTING GRADING        |")
-            # print("=" * 34 + "\n")
-        # elif is_reroll == True:
-            # print("\n" + "=" * 34)
-            # print("|        REROLLING        |")
-            # print("=" * 34 + "\n")
-        # else:
-            # print("\n" + "=" * 34)
-            # print("|       STARTING REGRADING       |")
-            # print("=" * 34 + "\n")
-        # print(f"Current task.ocr_engine is : {task.ocr_engine}")
         try:  
             # Skip image processing for manual grading
             if task.ocr_engine == "Auto":
@@ -3225,7 +3341,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             global sheet_path
             await get_sheet_data(sheet_path, sheet_url)
     
-            # Process the image using OCR API
+            # PROCESS THE IMAGE USING OCR API
             # Skip OCR if raw_extracted_text already exists (regrade case)
             if task.raw_extracted_text is None:
                 # Process the image using OCR API
@@ -3233,38 +3349,6 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                     # Use the priority router
                     extracted_text, used_engine = await get_ocr_result(output_riven)
                     # task.ocr_engine = used_engine # Update the task with which engine actually worked
-                    
-                    # if not extracted_text:
-                        # await task.interaction.followup.send("All OCR engines failed to read the image. Please try a clearer screenshot.")
-                        # return
-                    
-                    # print(f"OCR Space detection used...")
-                    # extracted_text = await ocr_space_file(output_riven)
-                    # # extracted_text = "failed"
-                    
-                    # non_english = False
-                    # if non_english_detector(extracted_text) == True:
-                        # non_english = True
-                        # print(f"OCR Space result : {extracted_text}")
-                    
-                    # # Use Gemini if OCRSpace is unavailable
-                    # if extracted_text == "failed" or non_english == True:
-                        # print(f"Gemini detection used...")
-                        # counter = 0
-                        # while True:
-                            # extracted_text = await gemini_api(output_riven)
-                            # if "ERROR" not in extracted_text:
-                                # break
-                            # counter+=1
-                            
-                            # if counter == 4:
-                                # extracted_text = "Limit Reached"
-                                # break
-                            
-                            # print(f"{counter} , retrying....")
-                            # await asyncio.sleep(5)    
-                        
-                    # task.raw_extracted_text = extracted_text  # Store the raw OCR result
             else:
                 extracted_text = task.raw_extracted_text  # Use stored OCR result for regrade
                 print(f"Using stored OCR result for regrade: {extracted_text}")
@@ -3315,6 +3399,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             extracted_text = extracted_text.replace(",",".")
             extracted_text = extracted_text.replace("'",".")
             extracted_text = extracted_text.replace(":",".")
+            extracted_text = extracted_text.replace("Lexi","")
+            extracted_text = extracted_text.replace("Bow","")
     
             # Use regex to remove dots between numbers and letters
             extracted_text = re.sub(r"(\d)\.(?=[a-zA-Z])", r"\1", extracted_text)
@@ -3328,9 +3414,10 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             # Create an instance of RivenStatDetails
             riven_stat_details = RivenStatDetails()
             
-            # Get weapon name and type on riven mod. Also riven rank if possible
-            weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_weapon_name(file_path, extracted_text, task.weapon_type, task.riven_rank, task.weapon_variant)
+            # GET WEAPON NAME AND TYPE ON RIVEN MOD. ALSO RIVEN RANK IF POSSIBLE
+            weapon_name, weapon_name_found, task.weapon_type, task.riven_rank, extracted_text = get_core_details(file_path, extracted_text, task.weapon_type, task.riven_rank)
             print(f"weapon_name : {weapon_name}")
+            
             if weapon_name_found == False:
                 if task.ocr_engine == "Auto":
                     await task.interaction.followup.send(
@@ -3388,13 +3475,8 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             else:
                 add_text = f""
             
-            # Count buff stat
-            extracted_text = extracted_text.lower()
-            if task.ocr_engine == "Auto":
-                buff_count, extracted_text, buff_naming = get_buff_count(extracted_text)
-                riven_stat_details.BuffCount = buff_count
-            else:
-                riven_stat_details.BuffCount = task.buff_count
+            # COUNT BUFF STAT _OLD
+            
             # return
             # Get weapon disposition and update weapon name with variant
             # print(f"BEFORE GET DISPO:\nweapon_name : {weapon_name}\nweapon_variant : {task.weapon_variant}\nweapon_type : {task.weapon_type}")
@@ -3408,7 +3490,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             if weapon_name == "Vinquibus" and task.weapon_type == "Melee":
                 weapon_name = "Vinquibus (Melee)"
             
-            # Get value and stat name
+            # GET VALUE AND STAT NAME
             try:
                 get_value_and_stat_name(extracted_text, riven_stat_details, task.weapon_type)
             except Exception as e:
@@ -3417,9 +3499,24 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 return
             
             riven_stat_details.StatCount = get_stat_count(riven_stat_details)
+            
+            # Damage to Faction value correction - convert TO PERCENTAGE
+            for i in range(riven_stat_details.StatCount):
+                # Only process if value is not percentage
+                if "Damage to" in riven_stat_details.StatName[i] and riven_stat_details.Value[i] < 3:
+                    damage_to_faction_fix(riven_stat_details, i)
+            
+            # COUNT BUFF STAT
+            # extracted_text = extracted_text.lower()
+            if task.ocr_engine == "Auto":
+                buff_count = get_buff_count(riven_stat_details, task.weapon_type, weapon_dispo)
+                riven_stat_details.BuffCount = buff_count
+            else:
+                riven_stat_details.BuffCount = task.buff_count
+            
             riven_stat_details.CurseCount = riven_stat_details.StatCount - riven_stat_details.BuffCount
             get_riven_type(riven_stat_details)
-            # print(f"Riven Type : {riven_stat_details.RivenType}")
+            print(f"Riven Type : {riven_stat_details.RivenType}")
             if riven_stat_details.RivenType == "Unknown Riven Type":
                 await task.interaction.followup.send(f"Unknown Riven Type.\n{extracted_text}", file=discord.File(output_riven))  # Use followup
                 print(f" Buff Count : {riven_stat_details.BuffCount}\n Stat Count : {riven_stat_details.StatCount}\n Stat Name : {riven_stat_details.StatName}")
@@ -3442,11 +3539,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                     # riven_stat_details.Value[i] -= 104
                     # print(f"value correction trigger!")
 
-            # Damage to Faction value correction - convert to percentage
-            for i in range(riven_stat_details.StatCount):
-                # Only process if value is not percentage
-                if "Damage to" in riven_stat_details.StatName[i] and riven_stat_details.Value[i] < 3:
-                    damage_to_faction_fix(riven_stat_details, i)
+            
 
             # print(f"riven_stat_details value : {riven_stat_details.Value}")
             # print(f"riven_stat_details stat name : {riven_stat_details.StatName}")
@@ -3515,19 +3608,19 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
                             riven_stat_details.Highlight[i] = "Bad"
                         
-                    # Highligh for curse
-                    elif code in negative_stats:
+                    # Default Red highlight for curse
+                    if code in ["DMG","CC","CD","MS","SC"]:
                         if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
-                            riven_stat_details.Highlight[i] = "Good"
+                            riven_stat_details.Highlight[i] = "Bad"
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
-                            riven_stat_details.Highlight[i] = "Good"
+                            riven_stat_details.Highlight[i] = "Bad"
                             
-                    # Default red highlight for curse
-                    elif code in ["DMG","CC","CD","MS","SC"]:
+                    # Green Highligh for curse
+                    if code in negative_stats:
                         if riven_stat_details.RivenType == "2 Buff 1 Curse" and i == 2:
-                            riven_stat_details.Highlight[i] = "Bad"
+                            riven_stat_details.Highlight[i] = "Good"
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i == 3:
-                            riven_stat_details.Highlight[i] = "Bad"
+                            riven_stat_details.Highlight[i] = "Good"
                             
                     # Highligh for dead stats
                     if code == "IMP" and has_impact == False and "IMP" in negative_stats:
@@ -3551,7 +3644,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                             riven_stat_details.Highlight[i] = "Wasted"
                         elif riven_stat_details.RivenType == "3 Buff 1 Curse" and i != 3:
                             riven_stat_details.Highlight[i] = "Wasted"
-            # Get Min Max
+            # GET MIN MAX
             calculate_stats(riven_stat_details, task.weapon_type, weapon_dispo)
             
             # Get rank rand Divide Min Max by 9 if riven_rank is Unranked
@@ -3597,7 +3690,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 else:
                     rivenrank = 10
                     
-                task.raw_extracted_text = f"{rivenrank}{base_name}{buff_naming}{riven_stat_details.Value[0]}{riven_stat_details.StatName[0]}{riven_stat_details.Value[1]}{riven_stat_details.StatName[1]}"
+                task.raw_extracted_text = f"{rivenrank}{base_name}{riven_stat_details.Value[0]}{riven_stat_details.StatName[0]}{riven_stat_details.Value[1]}{riven_stat_details.StatName[1]}"
                 
                 if riven_stat_details.Value[2] != 999.9:
                     task.raw_extracted_text += f"{riven_stat_details.Value[2]}{riven_stat_details.StatName[2]}"
@@ -3714,7 +3807,14 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             print(e)
             traceback.print_exc()
             try:
-                await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
+                # await task.interaction.followup.send(f"❌ Error processing Riven: {str(e)}")
+                await task.interaction.followup.send(
+                        f"**❌ ERROR PROCESSING RIVEN**\n"
+                        f"▶ Ensure all Riven Mod details are fully visible and not obscured.\n"
+                        f"▶ If using a phone camera, avoid taking photos too close to the screen. Visible pixels or '[moire patterns](<https://www.google.com/search?q=what+is+moire+patterns>)' can interfere with detection.\n\n"
+                        f"**Detected Text:**\n`{extracted_text}`", 
+                        file=discord.File(output_riven)
+                    )
             except:
                 print("Failed to send error")
             
