@@ -1189,7 +1189,7 @@ def get_core_details(file_path, extracted_text, weapon_type, riven_rank):
     # text_to_search = re.sub(r"(18|10)", "", text_to_search[:5])
     head = text_to_search[:5]
     tail = text_to_search[5:]
-    head = re.sub(r"10|18|5|9", "", head)
+    head = re.sub(r"10|18", "", head)
     text_to_search = head + tail
     # print(f"text_to_search : {text_to_search}")
     
@@ -1251,10 +1251,10 @@ def get_core_details(file_path, extracted_text, weapon_type, riven_rank):
     if weapon_name_found:
         # Check if "10|5" or "18|9" appears right before the weapon name
         if riven_rank == "Auto":
-            if "18" in extracted_text_copy[:5] or "9" in extracted_text_copy[:5]:
+            if "18" in extracted_text_copy[:5]:
                 riven_rank = "Maxed"
                 print("Riven rank is detected from the Riven mod.")
-            elif "10" in extracted_text_copy[:5] or "5" in extracted_text_copy[:5]:
+            elif "10" in extracted_text_copy[:5]:
                 riven_rank = "Unranked"
                 print("Riven rank is detected from the Riven mod.")
     
