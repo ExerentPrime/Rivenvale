@@ -519,7 +519,7 @@ def excel_to_pandas(row, col):
     
     return row_index, col_index
     
-async def resize_large_image(image_path: str, max_size: int = 1920) -> None:
+def resize_large_image(image_path: str, max_size: int = 1920) -> None:
     """Resize an image if its width or height exceeds max_size while maintaining aspect ratio."""
     try:
         with Image.open(image_path) as img:
@@ -552,14 +552,14 @@ async def resize_large_image(image_path: str, max_size: int = 1920) -> None:
     except Exception as e:
         print(f"Error resizing image: {e}")
 
-async def convert_image_to_jpg(image_path, output_riven):
+def convert_image_to_jpg(image_path, output_riven):
     try:
         # Open the image file directly
         with Image.open(image_path) as image:
             # Convert and save
             rgb_image = image.convert('RGB')
             rgb_image.save(output_riven, "JPEG")
-            await resize_large_image(output_riven)
+            resize_large_image(output_riven)
             print(f"Converted {image_path} to {output_riven}")
             
     except Exception as e:
@@ -592,7 +592,9 @@ async def get_ocr_result(filename):
         elif text and text != "failed" and len(text.strip()) > 5:
             if non_english_detector(text):
                 print(f"Non-english detected!")
+                counter = 99 # Stop loop
             else:
+                # Success
                 return text, "OCR Space"
             
     # if len(text.strip()) < 5:
@@ -661,6 +663,11 @@ async def gemini_api(filename):
         "Weapon Recoil","Zoom",
     ]
     
+    all_weapon_name_list = []
+    for w in all_weapon_name:
+        all_weapon_name_list.append(w["name"])
+    # print(f"#### all_weapon_name_list first 5 data : {all_weapon_name_list[0:5]}")
+    
     try:
         # 1. Read the Image Bytes from the local file path
         with open(filename, 'rb') as f:
@@ -680,9 +687,9 @@ async def gemini_api(filename):
         CRITICAL INSTRUCTION:
         1. Analyze the Riven Mod image.
         2. Extract the Weapon Name (it may be in Chinese or another language).
-        3. **MANDATORY LOOKUP:** Search for the extracted name in the attached 'weapon_data.txt' content. 
-        4. Replace the extracted name with the English name found in the file.
-        5. If the name is not in the file, translate it accurately to the official Warframe English name.
+        3. **MANDATORY LOOKUP:** Search for the extracted name in the 'REFERENCE WEAPON NAME LIST' content. 
+        4. Replace the extracted name with the English name found in the list.
+        5. If the name is not in the list, translate it accurately to the official Warframe English name.
         6. **Canonical Stat Conversion:** Convert extracted stat names to the list below. If a name is a variation (e.g., "Critical Hit Multiplier"), use the standard name (e.g., "Critical Damage").
         7. **Special Cases:** - If "Vinquibus (Melee)" is identified, set the weapon name to "Vinquibusmelee".
 
@@ -708,12 +715,11 @@ async def gemini_api(filename):
             data=image_bytes,
             mime_type=mime_type # Use the inferred MIME type
         )
-        with open('weapon_data.txt', 'r', encoding='utf-8') as f:
-            weapon_db_text = f.read()
-        # weapon_db_part = types.Part.from_text(weapon_db_text)
+        # with open('weapon_data.txt', 'r', encoding='utf-8') as f:
+            # weapon_db_text = f.read()
         
         # contents = [image_part, types.Part.from_text(prompt_text)]
-        contents = [f"REFERENCE WEAPON NAME:\n{weapon_db_text}", image_part, prompt_text]
+        contents = [f"REFERENCE WEAPON NAME:\n{all_weapon_name_list}", image_part, prompt_text]
 
         # 5. Call the Gemini API
         response = gemini_client.models.generate_content(
@@ -732,6 +738,7 @@ async def gemini_api(filename):
         return f"CRITICAL ERROR during API call: {e}"
         
 async def ocr_space_file(filename):
+        
     try:
         payload = {
             "isOverlayRequired": False,
@@ -1187,11 +1194,17 @@ def get_core_details(file_path, extracted_text, weapon_type, riven_rank):
     text_to_search = extracted_text.lower().replace(" ", "").strip()
     
     # text_to_search = re.sub(r"(18|10)", "", text_to_search[:5])
-    head = text_to_search[:5]
-    tail = text_to_search[5:]
-    head = re.sub(r"10|18", "", head)
-    text_to_search = head + tail
-    # print(f"text_to_search : {text_to_search}")
+    # head = text_to_search[:5]
+    # tail = text_to_search[5:]
+    # head = re.sub(r"10|18", "", head)
+    # text_to_search = head + tail
+    
+    ## Make sure it start with a-z or A-Z
+    for i in range(len(text_to_search)):
+        if text_to_search[i].isalpha():
+            text_to_search = text_to_search[i:]
+            break
+    print(f"text_to_search : {text_to_search}")
     
     # Sort weapons by name length (Longest First)
     weapon_list = data.get("ExportWeapons", [])
@@ -1210,13 +1223,22 @@ def get_core_details(file_path, extracted_text, weapon_type, riven_rank):
                 # print(f"###### search_window : {search_window}")
             
             if level == 1.0:
+                if "-" in search_window and "-" not in name_clean:
+                    continue
+                
                 # Exact match check
-                if name_clean in text_to_search:
+                if name_clean in search_window:
                     best_match = weapon['name']
                     # For an exact match, the 'end' is just the start index + length
                     start_idx = text_to_search.find(name_clean)
                     last_match_end = start_idx + len(name_clean)
                     break
+                # if name_clean in text_to_search:
+                    # best_match = weapon['name']
+                    # # For an exact match, the 'end' is just the start index + length
+                    # start_idx = text_to_search.find(name_clean)
+                    # last_match_end = start_idx + len(name_clean)
+                    # break
             else:
                 # Fuzzy match check
                 matcher = difflib.SequenceMatcher(None, name_clean, search_window)
@@ -1940,6 +1962,10 @@ def get_stat_name(input_string, weapon_type):
     
     if not possible_keys:
         possible_keys = list(stats_map.keys())
+        
+    # Sort: longest to shortest
+    possible_keys = sorted(stats_map.keys(), key=len, reverse=True)
+    
     # print(f"query : {query}")
     matches = difflib.get_close_matches(query, possible_keys, n=1, cutoff=0.5)
 
@@ -3327,7 +3353,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
             # Skip image processing for manual grading
             if task.ocr_engine == "Auto":
                 output_riven = f"riven_image_{str(uuid.uuid4())[:8]}.jpg"
-                await convert_image_to_jpg(task.image, output_riven)
+                convert_image_to_jpg(task.image, output_riven)
             else:
                 output_riven = task.image
     
@@ -3706,7 +3732,7 @@ async def process_grading(task: GradingTask, is_edit: bool = False, is_reroll: b
                 title_text = "GRADING FAILED ❌"
                 
                 if task.ocr_engine == "Auto":
-                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ Stats missing or wrong? Please upload a clearer, flat image with readable text.\n▶ If the stats values are outside the min-max range, please adjust the Riven rank manually. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ **BE AWARE**: If the Riven image is from **riven.market**, **warframe.market**, or **any other website**, the stats may be incorrect or outdated due to old uploads or uploader errors."
+                    description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ Is something wrong? Please upload a clearer, flat image with **readable text**.\n▶ If the stats values are outside the min-max range, please adjust the Riven rank manually. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ **BE AWARE**: If the Riven image is from **riven.market**, **warframe.market**, or **any other website**, the stats may be incorrect or outdated due to old uploads or uploader errors."
                 else:
                     description_text = f"{task.interaction.user.mention}\n{add_text_2}▶ If the stat value is far from the min-max range, regrade and manually set the Riven rank. [how to?](https://discord.com/channels/1350251436977557534/1351557739066691584/1400775911590334515)\n▶ If it still fails, it may be due to an incorrect input or because the Riven you are referring to is outdated."
                     
