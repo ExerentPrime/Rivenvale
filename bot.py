@@ -1635,16 +1635,16 @@ def fix_stat_name(extracted_text: str) -> str:
     replacements = {
         # Additional Combo Count Chance
         "acc": "Additional Combo Count Chance",
-        "accc": "Additional Combo Count Chance",
         "add": "Additional Combo Count Chance",
+        "accc": "Additional Combo Count Chance",
         "addcombo": "Additional Combo Count Chance",
         "combochance": "Additional Combo Count Chance",
 
         # Chance to Gain Combo Count
-        "gain": "Chance to Gain Combo Count",
         "gcc": "Chance to Gain Combo Count",
-        "ctgcc": "Chance to Gain Combo Count",
         "cgcc": "Chance to Gain Combo Count",
+        "gain": "Chance to Gain Combo Count",
+        "ctgcc": "Chance to Gain Combo Count",
         "gaincombo": "Chance to Gain Combo Count",
 
         # Ammo Maximum
@@ -1662,29 +1662,32 @@ def fix_stat_name(extracted_text: str) -> str:
         "combodur": "Combo Duration",
 
         # Cold
-        "cold": "Cold",
+        "c": "Cold",
         "ice": "Cold",
+        "cold": "Cold",
 
         # Critical Chance
         "cc": "Critical Chance",
         "crit": "Critical Chance",
-        "critchance": "Critical Chance",
-        "critical": "Critical Chance",
         "cchance": "Critical Chance",
         "critch": "Critical Chance",
+        "critical": "Critical Chance",
+        "critchance": "Critical Chance",
 
         # Critical Chance for Slide Attack
+        "ccsa": "Critical Chance for Slide Attack",
+        "ccfsa": "Critical Chance for Slide Attack",
         "slide": "Critical Chance for Slide Attack",
-        "slidecrit": "Critical Chance for Slide Attack",
         "slidecc": "Critical Chance for Slide Attack",
+        "slidecrit": "Critical Chance for Slide Attack",
 
         # Critical Damage
         "cd": "Critical Damage",
+        "critd": "Critical Damage",
         "critdmg": "Critical Damage",
         "crtdmg": "Critical Damage",
-        "criticaldamage": "Critical Damage",
-        "critd": "Critical Damage",
         "critdamage": "Critical Damage",
+        "criticaldamage": "Critical Damage",
 
         # Damage
         "dmg": "Damage",
@@ -1703,17 +1706,18 @@ def fix_stat_name(extracted_text: str) -> str:
         "infested": "Damage to Infested",
 
         # Electricity
+        "e": "Electricity",
         "elec": "Electricity",
+        "shock": "Electricity",
         "electric": "Electricity",
         "electricity": "Electricity",
-        "shock": "Electricity",
 
         # Finisher Damage
         "fd": "Finisher Damage",
         "fin": "Finisher Damage",
+        "fdmg": "Finisher Damage",
         "finisher": "Finisher Damage",
         "finisherdmg": "Finisher Damage",
-        "fdmg": "Finisher Damage",
 
         # Fire Rate
         "fr": "Fire Rate",
@@ -1721,31 +1725,33 @@ def fix_stat_name(extracted_text: str) -> str:
         "firerate": "Fire Rate",
 
         # Heat
-        "heat": "Heat",
+        "h": "Heat",
         "fire": "Heat",
+        "heat": "Heat",
 
         # Heavy Attack Efficiency
-        "hae": "Heavy Attack Efficiency",
         "eff": "Heavy Attack Efficiency",
+        "hae": "Heavy Attack Efficiency",
         "heavy": "Heavy Attack Efficiency",
         "heavyatk": "Heavy Attack Efficiency",
         "heavyattack": "Heavy Attack Efficiency",
 
         # Impact
-        "impact": "Impact",
+        "i": "Impact",
         "imp": "Impact",
+        "impact": "Impact",
 
         # Initial Combo
         "ic": "Initial Combo",
-        "initialcombo": "Initial Combo",
-        "initcombo": "Initial Combo",
         "init": "Initial Combo",
+        "initcombo": "Initial Combo",
+        "initialcombo": "Initial Combo",
 
         # Magazine Capacity
         "mc": "Magazine Capacity",
         "mag": "Magazine Capacity",
-        "magazine": "Magazine Capacity",
         "magcap": "Magazine Capacity",
+        "magazine": "Magazine Capacity",
 
         # Melee Damage
         "md": "Melee Damage",
@@ -1755,15 +1761,15 @@ def fix_stat_name(extracted_text: str) -> str:
         # Multishot
         "ms": "Multishot",
         "multi": "Multishot",
-        "multishot": "Multishot",
         "mshot": "Multishot",
+        "multishot": "Multishot",
 
         # Projectile Speed
         "ps": "Projectile Speed",
         "pfs": "Projectile Speed",
         "proj": "Projectile Speed",
-        "projectile": "Projectile Speed",
         "projspd": "Projectile Speed",
+        "projectile": "Projectile Speed",
 
         # Punch Through
         "pt": "Punch Through",
@@ -1771,22 +1777,24 @@ def fix_stat_name(extracted_text: str) -> str:
         "puncthru": "Punch Through",
 
         # Puncture
-        "puncture": "Puncture",
+        "p": "Puncture",
         "punc": "Puncture",
+        "puncture": "Puncture",
 
         # Range
-        "range": "Range",
+        "r": "Range",
         "rng": "Range",
 
         # Reload Speed
         "rs": "Reload Speed",
-        "reload": "Reload Speed",
         "rld": "Reload Speed",
         "rls": "Reload Speed",
+        "reload": "Reload Speed",
 
         # Slash
-        "slash": "Slash",
+        "s": "Slash",
         "sl": "Slash",
+        "slash": "Slash",
 
         # Status Chance
         "sc": "Status Chance",
@@ -1796,22 +1804,25 @@ def fix_stat_name(extracted_text: str) -> str:
 
         # Status Duration
         "sd": "Status Duration",
+        "stdur": "Status Duration",
         "statusdur": "Status Duration",
         "statusduration": "Status Duration",
-        "stdur": "Status Duration",
 
         # Toxin
+        "t": "Toxin",
+        "tx": "Toxin",
         "tox": "Toxin",
         "toxin": "Toxin",
-        "tx": "Toxin",
 
         # Weapon Recoil
         "wr": "Weapon Recoil",
         "rec": "Weapon Recoil",
-        "recoil": "Weapon Recoil",
         "rcl": "Weapon Recoil",
+        "recoil": "Weapon Recoil",
 
         # Zoom
+        "z": "Zoom",
+        "zm": "Zoom",
         "zoom": "Zoom",
     }
 
@@ -3917,13 +3928,14 @@ async def weapon_autocomplete(interaction, current: str):
 @tree.command(name="legend", description="Legend/Key")
 async def status(interaction: discord.Interaction):
     embed_content = """
+AMMO  : Ammo Maximum
 AS    : Attack Speed
 CC    : Critical Chance
 CD    : Critical Damage
+DMG   : Damage
 DTC   : Damage to Corpus
 DTG   : Damage to Grineer
 DTI   : Damage to Infested
-DMG   : Damage
 EFF   : Heavy Attack Efficiency
 ELEC  : Electricity
 FIN   : Finisher Damage
@@ -3932,14 +3944,14 @@ IC    : Initial Combo
 IMP   : Impact
 MAG   : Magazine Capacity
 MS    : Multishot
-PFS   : Projectile Flight Speed
+PFS   : Projectile Speed
 PT    : Punch Through
 PUNC  : Puncture
 REC   : Recoil
 RLS   : Reload Speed
 SC    : Status Chance
 SD    : Status Duration
-SLIDE : Critical Hit on Slide
+SLIDE : Critical Chance for Slide Attack
 TOX   : Toxin
 """
     await interaction.response.send_message(f"```{embed_content}```")
